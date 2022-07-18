@@ -86,13 +86,26 @@ export const graphQuery = async (url: string, query: string): Promise<any> => {
   return await graphQLRequest(url, query);
 };
 
-const withRetries = async (method: () => Promise<any | undefined>) => {
+const withRetries = async (method: () => Promise<any | undefined>, controller?: AbortController, timeout?: number) => {
+  let handle: NodeJS.Timeout | undefined = undefined;
   for (let i = 0; i < 5; i++) {
     try {
+      if (controller && timeout) {
+        handle = setTimeout(() => {
+          controller.abort();
+        }, timeout);
+      }
       return await method();
     } catch (e: any) {
-      if (e.errno !== "ENOTFOUND") {
+      if (e.name === "AbortError" || e.errno === "ENOTFOUND") {
+        // Either we aborted due to timeout or a disconnect error occurred (which should be ignored).
+        continue;
+      } else {
         throw e;
+      }
+    } finally {
+      if (handle) {
+        clearTimeout(handle);
       }
     }
   }
@@ -157,6 +170,7 @@ export class FallbackSubgraph<T> {
     private readonly maxLag: number,
     private readonly domain: SubgraphDomain = SubgraphDomain.COMMON,
     urls: string[] = [],
+    private readonly abortController?: AbortController,
     private readonly stallTimeout = 10_000,
   ) {
     // Add in any configured subgraph urls we want to use.
@@ -216,33 +230,28 @@ export class FallbackSubgraph<T> {
       });
     }
 
-    const errors: Error[] = [];
+    const errors: any[] = [];
     // Try each subgraph client in order of priority.
     for (const subgraph of orderedSubgraphs) {
+      let success = false;
+      const startTime = Date.now();
       try {
-        return await Promise.race([
-          new Promise<Q>(async (resolve, reject) => {
-            const startTime = Date.now();
-            let success = false;
-            try {
-              const result = await withRetries(async () => await method(subgraph.client, subgraph.url));
-              success = true;
-              resolve(result);
-            } catch (e) {
-              reject(e);
-            } finally {
-              subgraph.metrics.calls.push({
-                timestamp: startTime,
-                // Exec time is measured in seconds.
-                execTime: (Date.now() - startTime) / 1000,
-                success,
-              });
-            }
-          }),
-          new Promise<Q>((_, reject) => setTimeout(() => reject(new NxtpError("Timeout")), this.stallTimeout)),
-        ]);
+        const result = await withRetries(
+          async () => await method(subgraph.client, subgraph.url),
+          this.abortController,
+          this.stallTimeout,
+        );
+        success = true;
+        return result;
       } catch (e: any) {
         errors.push(e);
+      } finally {
+        subgraph.metrics.calls.push({
+          timestamp: startTime,
+          // Exec time is measured in seconds.
+          execTime: (Date.now() - startTime) / 1000,
+          success,
+        });
       }
     }
     throw new NxtpError("Unable to handle request", {
@@ -329,7 +338,11 @@ export class FallbackSubgraph<T> {
         await Promise.all(
           Array.from(this.subgraphs.values()).map(async (subgraph) => {
             try {
-              const { _meta } = await withRetries(async () => await (subgraph.client as any).GetBlockNumber());
+              const { _meta } = await withRetries(
+                async () => await (subgraph.client as any).GetBlockNumber(),
+                this.abortController,
+                this.stallTimeout,
+              );
               const syncedBlockValid =
                 _meta && _meta.block && _meta.block.number && !isNaN(parseInt(_meta.block.number));
               const syncedBlock: number = syncedBlockValid ? parseInt(_meta.block.number) : 0;

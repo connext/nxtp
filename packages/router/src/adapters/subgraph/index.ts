@@ -77,12 +77,14 @@ export const subgraphContractReader = (): ContractReader => {
   Object.entries(config.chainConfig).forEach(([chainId, { subgraph, analyticsSubgraph, subgraphSyncBuffer }]) => {
     const chainIdNumber = parseInt(chainId);
 
+    const abortController = new AbortController();
     sdks[chainIdNumber] = new FallbackSubgraph<Sdk>(
       chainIdNumber,
-      (url: string) => getSdk(new GraphQLClient(url)),
+      (url: string) => getSdk(new GraphQLClient(url, { signal: abortController.signal })),
       subgraphSyncBuffer,
       SubgraphDomain.COMMON,
       subgraph,
+      abortController,
     );
 
     analyticsSdks[chainIdNumber] = new FallbackSubgraph<AnalyticsSdk>(
