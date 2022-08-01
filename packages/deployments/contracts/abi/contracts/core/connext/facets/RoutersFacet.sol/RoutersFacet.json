@@ -43,7 +43,7 @@
   "event RouterRecipientSet(address indexed,address indexed,address indexed)",
   "event RouterRemoved(address indexed,address)",
   "event RouterUnapprovedForPortal(address,address)",
-  "function LIQUIDITY_FEE_DENOMINATOR() view returns (uint256)",
+  "function LIQUIDITY_FEE_DENOMINATOR() pure returns (uint256)",
   "function LIQUIDITY_FEE_NUMERATOR() view returns (uint256)",
   "function acceptProposedRouterOwner(address)",
   "function addRouterLiquidity(uint256,address) payable",

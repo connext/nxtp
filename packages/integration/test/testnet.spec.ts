@@ -41,7 +41,6 @@ import {
   SKIP_SEQUENCER_CHECKS,
   RELAYER_CONFIG,
   LOCAL_RELAYER_ENABLED,
-  CANONICAL_ASSET,
   CHAIN_DATA,
   LOCAL_CARTOGRAPHER_ENABLED,
   CARTOGRAPHER_CONFIG,
@@ -249,25 +248,22 @@ describe("TESTNET:E2E", () => {
           { domain: domainInfo.DESTINATION, deployer: agents.deployer?.destination },
         ]) {
           const localAsset = domain.config.assets[0].address.toLowerCase();
-          let canonicalAsset: string | undefined = CANONICAL_ASSET;
-          if (!canonicalAsset) {
-            // Convert the local asset into the canonical asset using information from the chain.
-            const { canonicalTokenId, canonicalAsset: _canonicalAsset } = await convertToCanonicalAsset(context, {
-              adopted: localAsset,
-              domain,
-            });
-            canonicalAsset = _canonicalAsset;
-            log.info("Retrieved canonical asset from onchain.", {
-              domain,
-              etc: { canonicalAsset, canonicalTokenId },
-            });
-          }
+          // Convert the local asset into the canonical asset using information from the chain.
+          const { canonicalId, canonicalDomain } = await convertToCanonicalAsset(context, {
+            adopted: localAsset,
+            domain,
+          });
+          log.info("Retrieved canonical asset info from onchain.", {
+            domain,
+            etc: { canonicalId, canonicalDomain },
+          });
 
           if (
-            canonicalAsset === constants.AddressZero ||
+            canonicalId === constants.AddressZero ||
             !(await getAssetApproval(context, {
               domain,
-              canonical: canonicalAsset,
+              canonicalId,
+              canonicalDomain,
             }))
           ) {
             if (!deployer) {
@@ -276,28 +272,36 @@ describe("TESTNET:E2E", () => {
             const hash = await setupAsset(context, {
               deployer,
               domain,
-              canonical: canonicalAsset,
+              canonical: canonicalId,
               local: localAsset,
             });
             log.info("Added asset to chain.", { domain, hash });
           } else {
             // Check to make sure canonical -> local is correct onchain.
-            const { adoptedToCanonical, canonicalToAdopted, canonicalTokenId, getTokenId, tokenRegistry } =
-              await checkOnchainLocalAsset(context, {
-                domain,
-                adopted: localAsset,
-              });
-            if (canonicalToAdopted !== localAsset || adoptedToCanonical !== canonicalTokenId) {
+            const {
+              adoptedToCanonical,
+              canonicalToAdopted,
+              canonicalId,
+              canonicalDomain,
+              canonicalKey,
+              getTokenId,
+              tokenRegistry,
+            } = await checkOnchainLocalAsset(context, {
+              domain,
+              adopted: localAsset,
+            });
+            if (canonicalToAdopted !== localAsset || adoptedToCanonical !== canonicalId) {
               // TODO: Change this to log.info, actually carry out the on-chain replacement below.
               // (Need to confirm that this works.)
               log.fail("Asset needs to be overwritten! Wrong local asset set on this domain.", {
                 domain,
                 etc: {
-                  canonical: canonicalAsset,
                   local: localAsset,
                   adoptedToCanonical,
                   canonicalToAdopted,
-                  canonicalTokenId,
+                  canonicalId,
+                  canonicalDomain,
+                  canonicalKey,
                   getTokenId,
                 },
               });
@@ -309,7 +313,8 @@ describe("TESTNET:E2E", () => {
                 const hash = await removeAsset(context, {
                   deployer,
                   domain,
-                  canonical: canonicalAsset,
+                  canonicalId,
+                  canonicalDomain,
                   local: localAsset,
                 });
                 log.info("Removed asset.", { domain, hash });
@@ -318,7 +323,7 @@ describe("TESTNET:E2E", () => {
                 const hash = await setupAsset(context, {
                   deployer,
                   domain,
-                  canonical: canonicalAsset,
+                  canonical: canonicalId,
                   local: localAsset,
                 });
                 log.info("Replaced asset.", { domain, hash });
@@ -327,11 +332,12 @@ describe("TESTNET:E2E", () => {
               log.info("Transfer asset is approved.", {
                 domain,
                 etc: {
-                  canonical: canonicalAsset,
                   local: localAsset,
                   adoptedToCanonical,
                   canonicalToAdopted,
-                  canonicalTokenId,
+                  canonicalId,
+                  canonicalDomain,
+                  canonicalKey,
                   getTokenId,
                   tokenRegistry,
                 },
@@ -790,10 +796,11 @@ describe("TESTNET:E2E", () => {
               relayerFee: "0",
               recovery: agents.user.address,
               agent: agents.user.address,
-              slippageTol: "3",
+              destinationMinOut: "0",
             },
-            transactingAssetId: originAsset.address,
-            amount: TRANSFER_TOKEN_AMOUNT.toString(),
+            transactingAsset: originAsset.address,
+            transactingAmount: TRANSFER_TOKEN_AMOUNT.toString(),
+            originMinOut: "0",
           };
           const encoded = connext.encodeFunctionData("xcall", [args]);
           const tx = await agents.user.origin.sendTransaction({

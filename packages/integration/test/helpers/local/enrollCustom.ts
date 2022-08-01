@@ -12,12 +12,12 @@ export const enrollCustom = async (
   const canonicalId = utils.hexlify(canonizeId(canonicalToken.tokenAddress));
   await Promise.all(
     otherTokens.map(async (token) => {
-      const readData = TokenRegistryInterface.encodeFunctionData("getLocalAddress(uint32,bytes32)", [
+      const readData = TokenRegistryInterface.encodeFunctionData("getLocalAddress", [
         +canonicalToken.domain,
         canonicalId,
       ]);
       const encoded = await txService.readTx({ chainId: +token.domain, data: readData, to: token.TokenRegistry });
-      const [registered] = TokenRegistryInterface.decodeFunctionResult("getLocalAddress(uint32,bytes32)", encoded);
+      const [registered] = TokenRegistryInterface.decodeFunctionResult("getLocalAddress", encoded);
       if (registered !== token.tokenAddress) {
         const data = TokenRegistryInterface.encodeFunctionData("enrollCustom", [
           canonicalToken.domain,

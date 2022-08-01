@@ -77,11 +77,11 @@ type OriginTransfer @entity {
   callback: Bytes
   callbackFee: BigInt
   relayerFee: BigInt
-  slippageTol: BigInt
+  destinationMinOut: BigInt
 
   # Event Data
   status: TransferStatus
-  message: Bytes
+  originMinOut: BigInt
 
   # Asset
   # The asset that gets sent in.
@@ -122,7 +122,7 @@ type DestinationTransfer @entity {
   callback: Bytes
   callbackFee: BigInt
   relayerFee: BigInt
-  slippageTol: BigInt
+  destinationMinOut: BigInt
 
   # Event Data
   status: TransferStatus

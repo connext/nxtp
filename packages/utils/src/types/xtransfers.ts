@@ -24,6 +24,9 @@ export const XTransferMethodCallSchema = Type.Object({
 export const XTransferOriginSchema = Type.Object({
   chain: TIntegerString,
 
+  // Event Data
+  originMinOut: TIntegerString,
+
   // Assets
   assets: Type.Object({
     transacting: Type.Object({
@@ -43,7 +46,7 @@ export const XTransferOriginSchema = Type.Object({
 export const XTransferDestinationSchema = Type.Object({
   chain: TIntegerString,
 
-  // Destination Event Data.
+  // Event Data
   status: Type.Enum(XTransferStatus),
   // Both Executed and Reconciled events emit `routers`.
   routers: Type.Array(TAddress),
@@ -84,14 +87,14 @@ export const CallParamsSchema = Type.Object({
   callData: Type.String(),
   originDomain: Type.String(),
   destinationDomain: Type.String(),
-  callback: TAddress,
-  callbackFee: TIntegerString,
-  relayerFee: TIntegerString,
   agent: TAddress,
   recovery: TAddress,
   forceSlow: Type.Boolean(),
   receiveLocal: Type.Boolean(),
-  slippageTol: TIntegerString,
+  callback: TAddress,
+  callbackFee: TIntegerString,
+  relayerFee: TIntegerString,
+  destinationMinOut: TIntegerString,
 });
 
 export const XTransferSchema = Type.Intersect([
@@ -142,8 +145,9 @@ export type CallParams = Static<typeof CallParamsSchema>;
 
 export const XCallArgsSchema = Type.Object({
   params: CallParamsSchema,
-  transactingAssetId: Type.String(),
-  amount: TIntegerString,
+  transactingAsset: Type.String(),
+  transactingAmount: TIntegerString,
+  originMinOut: TIntegerString,
 });
 
 export type XCallArgs = Static<typeof XCallArgsSchema>;
@@ -153,6 +157,8 @@ export const ExecuteArgsSchema = Type.Object({
   local: TAddress,
   routers: Type.Array(TAddress),
   routerSignatures: Type.Array(Type.String()),
+  sequencer: TAddress,
+  sequencerSignature: Type.String(),
   amount: TIntegerString,
   nonce: Type.Integer(),
   originSender: TAddress,

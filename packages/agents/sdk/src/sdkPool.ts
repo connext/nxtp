@@ -1,7 +1,12 @@
-import { providers, BigNumber } from "ethers";
+import { providers, BigNumber, utils } from "ethers";
 import { getChainData, Logger, createLoggingContext, ChainData } from "@connext/nxtp-utils";
 import { getContractInterfaces, contractDeployments, ChainReader } from "@connext/nxtp-txservice";
-import { ConnextHandler as TConnext, TokenRegistry as TTokenRegistry, IERC20Extended } from "@connext/nxtp-contracts";
+import {
+  ConnextHandler as TConnext,
+  TokenRegistry as TTokenRegistry,
+  IERC20Extended,
+  canonizeId,
+} from "@connext/nxtp-contracts";
 
 import { NxtpSdkConfig, getConfig } from "./config";
 import { SignerAddressMissing, ContractAddressMissing, ChainDataUndefined } from "./lib/errors";
@@ -512,13 +517,14 @@ export class NxtpSdkPool {
 
     // If the canonical domain is the same as the local domain, then there is no pool
     if (canonicalDomain !== Number(domainId)) {
-      let encoded = this.connext.encodeFunctionData("canonicalToAdopted", [canonicalId]);
+      const key = this.calculateCanonicalHash(canonicalDomain, canonicalId);
+      let encoded = this.connext.encodeFunctionData("canonicalToAdopted(bytes32)", [key]);
       let result = await this.chainReader.readTx({
         chainId: Number(domainId),
         to: connextContract,
         data: encoded,
       });
-      const adopted = this.connext.decodeFunctionResult("canonicalToAdopted", result)[0] as string;
+      const adopted = this.connext.decodeFunctionResult("canonicalToAdopted(bytes32)", result)[0] as string;
 
       // If the adopted token is the same as the local token, then there is no pool
       if (adopted != tokenAddress) {
@@ -615,5 +621,14 @@ export class NxtpSdkPool {
     };
 
     return stats;
+  }
+
+  private calculateCanonicalHash(canonicalDomain: number, _canonicalId: string): string {
+    const canonicalId = utils.hexlify(canonizeId(_canonicalId));
+    const payload = utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 canonicalId,uint32 canonicalDomain)"],
+      [{ canonicalId, canonicalDomain }],
+    );
+    return utils.solidityKeccak256(["bytes32"], [payload]);
   }
 }

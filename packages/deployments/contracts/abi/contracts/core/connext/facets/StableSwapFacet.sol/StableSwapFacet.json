@@ -17,7 +17,7 @@
   "function getSwapAPrecise(bytes32) view returns (uint256)",
   "function getSwapAdminBalance(bytes32,uint256) view returns (uint256)",
   "function getSwapLPToken(bytes32) view returns (address)",
-  "function getSwapStorage(bytes32) view returns (tuple(uint256,uint256,uint256,uint256,uint256,uint256,address,address[],uint256[],uint256[],uint256[]))",
+  "function getSwapStorage(bytes32) view returns (tuple(bytes32,uint256,uint256,uint256,uint256,uint256,uint256,address,address[],uint256[],uint256[],uint256[]))",
   "function getSwapToken(bytes32,uint8) view returns (address)",
   "function getSwapTokenBalance(bytes32,uint8) view returns (uint256)",
   "function getSwapTokenIndex(bytes32,address) view returns (uint8)",

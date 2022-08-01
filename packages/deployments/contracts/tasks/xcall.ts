@@ -19,7 +19,8 @@ type TaskArgs = {
   forceSlow?: string;
   receiveLocal?: string;
   recovery?: string;
-  slippageTol?: string;
+  originMinOut?: string;
+  destinationMinOut?: string;
   runs?: number;
   accounts?: number;
   showArgs?: string;
@@ -38,7 +39,8 @@ export default task("xcall", "Prepare a cross-chain tx")
   .addOptionalParam("forceSlow", "Override for forcing slow path")
   .addOptionalParam("receiveLocal", "Override for receiving local")
   .addOptionalParam("recovery", "Override for recovery address")
-  .addOptionalParam("slippageTol", "Override for slippage tolerance")
+  .addOptionalParam("originMinOut", "Override for origin domain tokens out (slippage tolerance)")
+  .addOptionalParam("destinationMinOut", "Override for destination domain tokens out (slippage tolerance)")
   .addOptionalParam("env", "Environment of contracts")
   .addOptionalParam("runs", "Number of times to fire the xcall")
   .addOptionalParam("accounts", "Number of accounts to fire xcalls in parallel")
@@ -59,7 +61,8 @@ export default task("xcall", "Prepare a cross-chain tx")
         forceSlow: _forceSlow,
         receiveLocal: _receiveLocal,
         recovery: _recovery,
-        slippageTol: _slippageTol,
+        originMinOut: _originMinOut,
+        destinationMinOut: _destinationMinOut,
         runs: _runs,
         accounts: _accounts,
         showArgs: _showArgs,
@@ -142,7 +145,8 @@ export default task("xcall", "Prepare a cross-chain tx")
       const forceSlow = _forceSlow === "true" ? true : false;
       const receiveLocal = _receiveLocal === "true" ? true : false;
       const recovery = _recovery ?? to;
-      const slippageTol = _slippageTol ?? "0";
+      const destinationMinOut = _destinationMinOut ?? "0";
+      const originMinOut = _originMinOut ?? "0";
 
       // Load contracts
       const connextName = getDeploymentName("ConnextHandler", env);
@@ -170,13 +174,14 @@ export default task("xcall", "Prepare a cross-chain tx")
         relayerFee,
         forceSlow,
         receiveLocal,
-        slippageTol,
+        destinationMinOut,
       };
 
       const args: XCallArgs = {
         params,
-        transactingAssetId,
-        amount,
+        transactingAsset: transactingAssetId,
+        transactingAmount: amount,
+        originMinOut,
       };
 
       // Check balances and allowances
@@ -226,7 +231,8 @@ export default task("xcall", "Prepare a cross-chain tx")
               console.log("  forceSlow: ", forceSlow);
               console.log("  receiveLocal: ", receiveLocal);
               console.log("  recovery: ", recovery);
-              console.log("  slippageTol:", slippageTol);
+              console.log("  originMinOut:", originMinOut);
+              console.log("  destinationMinOut:", destinationMinOut);
               console.log("xcall args", JSON.stringify(args));
               const encoded = connext.interface.encodeFunctionData("xcall", [args]);
               console.log("encoded: ", encoded);

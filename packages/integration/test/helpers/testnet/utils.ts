@@ -80,13 +80,15 @@ export const getAllowance = async (
 export const getAssetApproval = async (
   context: OperationContext,
   input: {
-    canonical: string;
+    canonicalId: string;
+    canonicalDomain: string;
     domain: DomainInfo;
   },
 ): Promise<boolean> => {
   const { chainreader } = context;
   const {
-    canonical,
+    canonicalId: _canonicalId,
+    canonicalDomain,
     domain: {
       chain,
       config: {
@@ -94,16 +96,22 @@ export const getAssetApproval = async (
       },
     },
   } = input;
-  const canonicalTokenId = utils.hexlify(canonizeTokenId(canonical));
   const connext = getConnextInterface();
 
-  const encoded = connext.encodeFunctionData("approvedAssets", [canonicalTokenId]);
+  const canonicalId = utils.hexlify(canonizeTokenId(_canonicalId));
+  const payload = utils.defaultAbiCoder.encode(
+    ["tuple(bytes32 canonicalId,uint32 canonicalDomain)"],
+    [{ canonicalId, canonicalDomain }],
+  );
+  const key = utils.solidityKeccak256(["bytes32"], [payload]);
+
+  const encoded = connext.encodeFunctionData("approvedAssets(bytes32)", [key]);
   const result = await chainreader.readTx({
     chainId: chain,
     to: contract,
     data: encoded,
   });
-  return connext.decodeFunctionResult("approvedAssets", result)[0] as boolean;
+  return connext.decodeFunctionResult("approvedAssets(bytes32)", result)[0] as boolean;
 };
 
 export const convertToCanonicalAsset = async (
@@ -113,8 +121,8 @@ export const convertToCanonicalAsset = async (
     domain: DomainInfo;
   },
 ): Promise<{
-  canonicalAsset: string;
-  canonicalTokenId: string;
+  canonicalDomain: string;
+  canonicalId: string;
 }> => {
   const { chainreader } = context;
   const {
@@ -134,10 +142,11 @@ export const convertToCanonicalAsset = async (
     to: contract,
     data: encoded,
   });
-  const canonicalAsset = connext.decodeFunctionResult("adoptedToCanonical", result)[0][1] as string;
+  const decoded = connext.decodeFunctionResult("adoptedToCanonical", result)[0];
+  const canonicalDomain = decoded[0] as string;
+  const canonicalId = decoded[1] as string;
 
-  const canonicalTokenId = utils.hexlify(canonizeTokenId(canonicalAsset));
-  return { canonicalAsset, canonicalTokenId };
+  return { canonicalDomain, canonicalId };
 };
 
 export const checkOnchainLocalAsset = async (
@@ -149,7 +158,9 @@ export const checkOnchainLocalAsset = async (
 ): Promise<{
   canonicalToAdopted: string;
   adoptedToCanonical: string;
-  canonicalTokenId: string;
+  canonicalId: string;
+  canonicalDomain: string;
+  canonicalKey: string;
   tokenRegistry: string;
   getTokenId: string;
 }> => {
@@ -165,6 +176,7 @@ export const checkOnchainLocalAsset = async (
   } = input;
   const connext = getConnextInterface();
 
+  let canonicalDomain: string;
   let adoptedToCanonical: string;
   let canonicalToAdopted: string;
   let trAddress: string;
@@ -176,18 +188,27 @@ export const checkOnchainLocalAsset = async (
       to: contract,
       data: encoded,
     });
-    adoptedToCanonical = connext.decodeFunctionResult("adoptedToCanonical", result)[0][1] as string;
+    const decoded = connext.decodeFunctionResult("adoptedToCanonical", result)[0];
+    canonicalDomain = decoded[0] as string;
+    adoptedToCanonical = decoded[1] as string;
   }
-  const canonicalTokenId = utils.hexlify(canonizeTokenId(adoptedToCanonical));
 
+  let canonicalKey: string;
+  const canonicalId = utils.hexlify(canonizeTokenId(adoptedToCanonical));
   {
-    const encoded = connext.encodeFunctionData("canonicalToAdopted", [canonicalTokenId]);
+    const payload = utils.defaultAbiCoder.encode(
+      ["tuple(bytes32 canonicalId,uint32 canonicalDomain)"],
+      [{ canonicalId, canonicalDomain }],
+    );
+    canonicalKey = utils.solidityKeccak256(["bytes32"], [payload]);
+
+    const encoded = connext.encodeFunctionData("canonicalToAdopted(bytes32)", [canonicalKey]);
     const result = await chainreader.readTx({
       chainId: chain,
       to: contract,
       data: encoded,
     });
-    canonicalToAdopted = connext.decodeFunctionResult("canonicalToAdopted", result)[0] as string;
+    canonicalToAdopted = connext.decodeFunctionResult("canonicalToAdopted(bytes32)", result)[0] as string;
   }
 
   {
@@ -209,7 +230,9 @@ export const checkOnchainLocalAsset = async (
   return {
     canonicalToAdopted: canonicalToAdopted.toLowerCase(),
     adoptedToCanonical: adoptedToCanonical.toLowerCase(),
-    canonicalTokenId: canonicalTokenId.toLowerCase(),
+    canonicalId: canonicalId.toLowerCase(),
+    canonicalDomain: canonicalDomain,
+    canonicalKey: canonicalKey,
     getTokenId: getTokenId.toLowerCase(),
     tokenRegistry: trAddress,
   };
@@ -219,14 +242,16 @@ export const removeAsset = async (
   _: OperationContext,
   input: {
     deployer?: Wallet;
-    canonical: string;
+    canonicalId: string;
+    canonicalDomain: string;
     local: string;
     domain: DomainInfo;
   },
 ): Promise<string> => {
   const {
     deployer,
-    canonical,
+    canonicalId: _canonicalId,
+    canonicalDomain,
     local,
     domain: {
       chain,
@@ -235,14 +260,20 @@ export const removeAsset = async (
       },
     },
   } = input;
-  const canonicalTokenId = utils.hexlify(canonizeTokenId(canonical));
   const connext = getConnextInterface();
   if (!deployer) {
     throw new Error("Need deployer agent to remove asset");
   }
 
+  const canonicalId = utils.hexlify(canonizeTokenId(_canonicalId));
+  const payload = utils.defaultAbiCoder.encode(
+    ["tuple(bytes32 canonicalId,uint32 canonicalDomain)"],
+    [{ canonicalId, canonicalDomain }],
+  );
+  const key = utils.solidityKeccak256(["bytes32"], [payload]);
+
   // Asset is not approved. Use deployer to approve asset.
-  const encoded = connext.encodeFunctionData("removeAssetId", [canonicalTokenId, local]);
+  const encoded = connext.encodeFunctionData("removeAssetId(bytes32,address)", [key, local]);
   const tx = await deployer.sendTransaction({
     chainId: chain,
     to: contract,

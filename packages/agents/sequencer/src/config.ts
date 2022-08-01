@@ -37,6 +37,8 @@ export const getEnvConfig = (
   }
 
   const _sequencerConfig: SequencerConfig = {
+    mnemonic: process.env.SEQ_MNEMONIC || configJson.mnemonic || configFile.mnemonic,
+    web3SignerUrl: process.env.SEQ_WEB3_SIGNER_URL || configJson.web3SignerUrl || configFile.web3SignerUrl,
     redis: {
       host: process.env.SEQ_REDIS_HOST || configJson.redis?.host || configFile.redis?.host,
       port: process.env.SEQ_REDIS_PORT || configJson.redis?.port || configFile.redis?.port || 6379,

@@ -98,6 +98,8 @@ export const SequencerConfigSchema = Type.Object({
     Type.Literal("trace"),
     Type.Literal("silent"),
   ]),
+  mnemonic: Type.Optional(Type.String()),
+  web3SignerUrl: Type.Optional(Type.String()),
   network: Type.Union([Type.Literal("testnet"), Type.Literal("mainnet"), Type.Literal("local")]),
   redis: TRedisConfig,
   server: TServerConfig,

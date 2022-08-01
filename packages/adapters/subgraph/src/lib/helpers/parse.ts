@@ -52,12 +52,15 @@ export const originTransfer = (entity: any): OriginTransfer => {
       destinationDomain: entity.destinationDomain,
       recovery: entity.recovery,
       agent: entity.agent,
-      slippageTol: entity.slippageTol,
+      destinationMinOut: entity.destinationMinOut,
     },
 
     // Origin Info
     origin: {
       chain: entity.chainId,
+
+      // Event Data
+      originMinOut: entity.originMinOut,
 
       // Assets
       assets: {
@@ -133,7 +136,7 @@ export const destinationTransfer = (entity: any): DestinationTransfer => {
       originDomain: entity.originDomain,
       recovery: entity.recovery,
       agent: entity.agent,
-      slippageTol: entity.slippageTol,
+      destinationMinOut: entity.destinationMinOut,
     },
 
     // Origin Info

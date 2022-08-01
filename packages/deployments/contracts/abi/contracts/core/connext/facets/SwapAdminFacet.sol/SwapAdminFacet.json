@@ -19,7 +19,7 @@
   "event RampAStarted(bytes32 indexed,uint256,uint256,address)",
   "event RampAStopped(bytes32 indexed,address)",
   "event SwapFeesSet(bytes32 indexed,uint256,address)",
-  "event SwapInitialized(bytes32 indexed,tuple(uint256,uint256,uint256,uint256,uint256,uint256,address,address[],uint256[],uint256[],uint256[]),address)",
+  "event SwapInitialized(bytes32 indexed,tuple(bytes32,uint256,uint256,uint256,uint256,uint256,uint256,address,address[],uint256[],uint256[],uint256[]),address)",
   "function initializeSwap(bytes32,address[],uint8[],string,string,uint256,uint256,uint256,address)",
   "function rampA(bytes32,uint256,uint256)",
   "function setSwapAdminFee(bytes32,uint256)",

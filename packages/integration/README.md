@@ -4,6 +4,10 @@ A test script to validate the end-to-end cross-chain transfer process.
 
 # E2E Local Environment
 
+## External Dependencies
+
+Make sure you have docker installed globally.
+
 ## Environment Variables
 
 In your local environment, run the following commands to export env variables which will be used in the local e2e runtime environment:
@@ -18,14 +22,7 @@ export GRAPH_1338_ENDPOINT="http://localhost:9010/subgraphs/name/connext/nxtp"
 If you need to run the test locally against local changes, you can build the images yourself.
 
 ```sh
-docker build --tag sequencer-publisher:latest --file ./docker/sequencer/publisher/Dockerfile .
-docker build --tag sequencer-subscriber:latest --file ./docker/sequencer/subscriber/Dockerfile .
-docker build --tag router-publisher:latest --file ./docker/router/publisher/Dockerfile .
-docker build --tag router-subscriber:latest --file ./docker/router/subscriber/Dockerfile .
-docker build --tag relayer:latest --file ./docker/relayer/Dockerfile .
-docker build --tag cartographer-transfers:latest --file ./docker/cartographer/transfers/Dockerfile .
-docker build --tag cartographer-routers:latest --file ./docker/cartographer/routers/Dockerfile .
-docker build --tag lighthouse:latest --file ./docker/lighthouse/Dockerfile .
+./packages/integration/build-docker-images.sh
 ```
 
 ## Edit Config If Needed
@@ -34,7 +31,7 @@ In `setup-integration-test.sh` there is a section that creates a `.env` file. An
 
 ## Steps
 
-1. Run `./setup-integration-test.sh`
+1. Run `./packages/integration/setup-integration-test.sh`
 2. Run `yarn workspace @connext/nxtp-integration run test`
 
 ## Logs from Deployment

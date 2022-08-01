@@ -1,4 +1,4 @@
-import { logger as ethersLogger } from "ethers";
+import { logger as ethersLogger, Wallet } from "ethers";
 import {
   Logger,
   getChainData,
@@ -12,6 +12,7 @@ import Broker from "foo-foo-mq";
 import { SubgraphReader } from "@connext/nxtp-adapters-subgraph";
 import { StoreManager } from "@connext/nxtp-adapters-cache";
 import { ChainReader, getContractInterfaces, contractDeployments } from "@connext/nxtp-txservice";
+import { Web3Signer } from "@connext/nxtp-adapters-web3signer";
 
 import { SequencerConfig } from "./lib/entities";
 import { getConfig } from "./config";
@@ -46,7 +47,20 @@ export const makePublisher = async (_configOverride?: SequencerConfig) => {
 
     if (!context.config.messageQueue.publisher) throw new Error(`No publisher found in config`);
 
-    context.logger.info("Publisher config generated.", requestContext, methodContext, { config: context.config });
+    context.logger.info("Sequencer config generated.", requestContext, methodContext, {
+      config: { ...context.config, mnemonic: context.config.mnemonic ? "*****" : "N/A" },
+    });
+
+    /// MARK - Signer
+    if (!context.config.mnemonic && !context.config.web3SignerUrl) {
+      throw new Error(
+        "No mnemonic or web3signer was configured. Please ensure either a mnemonic or a web3signer" +
+          " URL is provided in the config. Exiting!",
+      );
+    }
+    context.adapters.wallet = context.config.mnemonic
+      ? Wallet.fromMnemonic(context.config.mnemonic)
+      : new Web3Signer(context.config.web3SignerUrl!);
 
     /// MARK - Adapters
     context.adapters.cache = await setupCache(context.config.redis, context.logger, requestContext);

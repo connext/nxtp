@@ -1,7 +1,7 @@
 import { Signer, Wallet, BigNumber, providers } from "ethers";
 import { arrayify, solidityKeccak256, splitSignature, verifyMessage } from "ethers/lib/utils";
 
-import { encodeRouterPathPayload } from ".";
+import { encodeRouterPathPayload, encodeSequencerPermitPayload } from ".";
 
 /**
  * Occasionally have seen metamask return signatures with v = 00 or v = 01.
@@ -44,13 +44,34 @@ export const sign = async (hash: string, signer: Wallet | Signer): Promise<strin
 };
 
 /**
+ * Generates a signature on the transfer ID and routers array payload for the `execute` transaction.
+ * Permit represents a (whitelisted) sequencer's indication that they were responsible for assigning
+ * this path of routers to this particular transfer.
+ *
+ * @param transferId - The ID of the transfer.
+ * @param routers - The addresses of the routers that are supplying fast liquidity for the transfer.
+ * @param signer - The Wallet / Signer of the signing sequencer.
+ * @returns Signature of the payload from the signer.
+ */
+export const signSequencerPermitPayload = async (
+  transferId: string,
+  routers: string[],
+  signer: Wallet | Signer,
+): Promise<string> => {
+  const payload = encodeSequencerPermitPayload(transferId, routers);
+  const hash = solidityKeccak256(["bytes"], [payload]);
+  return await sign(hash, signer);
+};
+
+/**
  * Generates a signature on the router path length payload in `execute` transaction. Represents
  * consent of the signing router to use a portion of their liquidity (minus a fee) to `execute` the
  * transfer.
  *
  * @param transferId - The ID of the transfer.
  * @param pathLength - The number of routers that are supplying fast liquidity for the transfer.
- * @returns Signature of the payload from the signer
+ * @param signer - The Wallet / Signer of the signing router.
+ * @returns Signature of the payload from the signer.
  */
 export const signRouterPathPayload = async (
   transferId: string,

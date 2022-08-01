@@ -10,10 +10,15 @@ export const setupAsset = async (
 ) => {
   const requestContext = createRequestContext(setupAsset.name);
   const canonicalId = utils.hexlify(canonizeId(canonical.tokenAddress));
+  const payload = utils.defaultAbiCoder.encode(
+    ["tuple(bytes32 canonicalId,uint32 canonicalDomain)"],
+    [{ canonicalId, canonicalDomain: canonical.domain }],
+  );
+  const key = utils.solidityKeccak256(["bytes32"], [payload]);
   for (const domain of domains) {
-    const readData = ConnextHandlerInterface.encodeFunctionData("canonicalToAdopted", [canonicalId]);
+    const readData = ConnextHandlerInterface.encodeFunctionData("canonicalToAdopted(bytes32)", [key]);
     const encoded = await txService.readTx({ chainId: +domain.domain, data: readData, to: domain.ConnextHandler });
-    const [adopted] = ConnextHandlerInterface.decodeFunctionResult("canonicalToAdopted", encoded);
+    const [adopted] = ConnextHandlerInterface.decodeFunctionResult("canonicalToAdopted(bytes32)", encoded);
 
     if (adopted !== domain.adopted) {
       // @ts-ignore

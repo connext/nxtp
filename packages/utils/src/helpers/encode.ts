@@ -10,6 +10,11 @@ import { ExternalCall, ReconciledTransaction } from "..";
  */
 export const tidy = (str: string): string => `${str.replace(/\n/g, "").replace(/ +/g, " ")}`;
 
+export const SignedSequencerPermitEncoding = tidy(`tuple(
+  bytes32 transferId,
+  address[] routers
+)`);
+
 export const SignedRouterPathEncoding = tidy(`tuple(
   bytes32 transferId,
   uint256 pathLength
@@ -28,12 +33,22 @@ export const ReconciledTransactionDataEncoding = tidy(`tuple(
 )`);
 
 /**
- * Encodes a handleRelayerFee payload object, as defined in the Connext contract
+ * Encodes a sequencer payload object, as defined in the BridgeFacet contract.
  *
- * @param transferId - The nonce of the origin domain at the time the transaction was prepared. Used to generate
- * the transaction id for the crosschain transaction
- * @param pathLength - The number of routers in the path
- * @returns Encoded handleRelayerFee payload
+ * @param transferId - The ID of the transfer.
+ * @param routers - The addresses of the routers in the path.
+ * @returns Encoded sequencer permit payload.
+ */
+export const encodeSequencerPermitPayload = (transferId: string, routers: string[]): string => {
+  return defaultAbiCoder.encode([SignedSequencerPermitEncoding], [{ transferId, routers }]);
+};
+
+/**
+ * Encodes a router path payload object, as defined in the BridgeFacet contract.
+ *
+ * @param transferId - The ID of the transfer.
+ * @param pathLength - The number of routers in the path.
+ * @returns Encoded router path payload.
  */
 export const encodeRouterPathPayload = (transferId: string, pathLength: string): string => {
   return defaultAbiCoder.encode([SignedRouterPathEncoding], [{ transferId, pathLength }]);

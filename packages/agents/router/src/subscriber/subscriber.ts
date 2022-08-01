@@ -44,6 +44,12 @@ export const makeSubscriber = async (_configOverride?: NxtpRouterConfig) => {
     context.config = _configOverride ?? (await getConfig(context.chainData, contractDeployments));
 
     /// MARK - Signer
+    if (!context.config.mnemonic && !context.config.web3SignerUrl) {
+      throw new Error(
+        "No mnemonic or web3signer was configured. Please ensure either a mnemonic or a web3signer" +
+          " URL is provided in the config. Exiting!",
+      );
+    }
     context.adapters.wallet = context.config.mnemonic
       ? Wallet.fromMnemonic(context.config.mnemonic)
       : new Web3Signer(context.config.web3SignerUrl!);

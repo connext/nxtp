@@ -29,13 +29,14 @@ export const convertFromDbTransfer = (transfer: any): XTransfer => {
       relayerFee: BigNumber.from(BigInt((transfer.relayer_fee as string) ?? "0")).toString(),
       forceSlow: transfer.force_slow || false,
       receiveLocal: transfer.receive_local || false,
-      slippageTol: BigNumber.from(BigInt((transfer.slippage_tol as string) ?? "0")).toString(),
+      destinationMinOut: BigNumber.from(BigInt((transfer.destination_min_out as string) ?? "0")).toString(),
     },
     transferId: transfer.transfer_id,
 
     origin: transfer.origin_chain
       ? {
           chain: transfer.origin_chain,
+          originMinOut: BigNumber.from(BigInt((transfer.origin_min_out as string) ?? "0")).toString(),
           assets: {
             transacting: {
               amount: BigNumber.from(BigInt((transfer.origin_transacting_amount as string) ?? "0")).toString(),

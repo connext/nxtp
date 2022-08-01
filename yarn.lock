@@ -988,6 +988,7 @@ __metadata:
   dependencies:
     "@connext/nxtp-adapters-cache": "workspace:*"
     "@connext/nxtp-adapters-subgraph": "workspace:*"
+    "@connext/nxtp-adapters-web3signer": "workspace:*"
     "@connext/nxtp-txservice": "workspace:*"
     "@connext/nxtp-utils": "workspace:*"
     "@sinclair/typebox": 0.24.20

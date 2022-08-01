@@ -25,7 +25,7 @@ dataSources:
           file: ./src/amarok-runtime-staging/abis/ConnextHandler.json
       eventHandlers:
         # AssetAdded: canonicalId, domain, adoptedAsset, supportedAsset, caller
-        - event: AssetAdded(bytes32,uint32,address,address,address)
+        - event: AssetAdded(indexed bytes32,indexed bytes32,indexed uint32,address,address)
           handler: handleAssetAdded
         # RelayerAdded: relayer, caller
         - event: RelayerAdded(address,address)
@@ -37,15 +37,15 @@ dataSources:
           handler: handleRouterLiquidityAdded
         - event: RouterLiquidityRemoved(indexed address,address,address,uint256,address)
           handler: handleRouterLiquidityRemoved
-        - event: XCalled(indexed bytes32,((address,bytes,uint32,uint32,address,address,bool,bool,address,uint256,uint256,uint256),address,uint256),(address,uint256,uint256,address),uint256,bytes,address)
+        - event: XCalled(indexed bytes32,indexed uint256,((address,bytes,uint32,uint32,address,address,bool,bool,address,uint256,uint256,uint256),address,uint256,uint256),address,uint256,address)
           handler: handleXCalled
-        - event: Executed(indexed bytes32,indexed address,((address,bytes,uint32,uint32,address,address,bool,bool,address,uint256,uint256,uint256),address,address[],bytes[],uint256,uint256,address),address,uint256,address)
+        - event: Executed(indexed bytes32,indexed address,((address,bytes,uint32,uint32,address,address,bool,bool,address,uint256,uint256,uint256),address,address[],bytes[],address,bytes,uint256,uint256,address),address,uint256,address)
           handler: handleExecuted
           # Reconciled: transferId, origin, routers, asset, amount, caller
-        - event: Reconciled(indexed bytes32,indexed uint32,address[],address,uint256,address)
+        - event: Reconciled(indexed bytes32,address[],address,uint256,address)
           handler: handleReconciled
-          # StableSwapAdded: bytes32 canonicalId, uint32 domain, address swapPool, address caller
-        - event: StableSwapAdded(bytes32,uint32,address,address)
+          # StableSwapAdded: bytes32 canonicalId, bytes32 domain, address swapPool, address caller
+        - event: StableSwapAdded(indexed bytes32,indexed bytes32,indexed uint32,address,address)
           handler: handleStableSwapAdded
           # SponsorVaultUpdated: address oldSponsorVault, address newSponsorVault, address caller
         - event: SponsorVaultUpdated(address,address,address)
@@ -62,4 +62,19 @@ dataSources:
           handler: handleRouterOwnerAccepted
         - event: MaxRoutersPerTransferUpdated(uint256,address)
           handler: handleMaxRoutersPerTransferUpdated
+          # Swap utils events:
+        - event: TokenSwap(indexed bytes32,indexed address,uint256,uint256,uint128,uint128)
+          handler: handleAmmTokenSwap
+        - event: AddLiquidity(indexed bytes32,indexed address,uint256[],uint256[],uint256,uint256)
+          handler: handleAmmAddLiquidity
+        - event: RemoveLiquidity(indexed bytes32,indexed address,uint256[],uint256)
+          handler: handleAmmRemoveLiquidity
+        - event: RemoveLiquidityOne(indexed bytes32,indexed address,uint256,uint256,uint256,uint256)
+          handler: handleAmmRemoveLiquidityOne
+        - event: RemoveLiquidityImbalance(indexed bytes32,indexed address,uint256[],uint256[],uint256,uint256)
+          handler: handleAmmRemoveLiquidityImbalance
+        - event: NewAdminFee(indexed bytes32,uint256)
+          handler: handleAmmNewAdminFee
+        - event: NewSwapFee(indexed bytes32,uint256)
+          handler: handleAmmNewSwapFee
       file: ./src/amarok-runtime-staging/mapping.ts

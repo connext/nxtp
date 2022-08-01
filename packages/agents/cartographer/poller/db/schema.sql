@@ -163,7 +163,7 @@ CREATE TABLE public.transfers (
     reconcile_block_number integer,
     update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     agent character(42),
-    slippage_tol numeric
+    destination_min_out numeric
 );
 
 
@@ -252,4 +252,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20220524141906'),
     ('20220617215641'),
     ('20220618065158'),
-    ('20220707182823');
+    ('20220707182823'),
+    ('20220730013440');

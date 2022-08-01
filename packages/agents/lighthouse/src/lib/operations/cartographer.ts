@@ -8,6 +8,7 @@ import {
   transfersCastForUrl,
 } from "@connext/nxtp-utils";
 import axios from "axios";
+import { constants } from "ethers";
 
 import { getOperations } from "../../lib/operations";
 import { getContext } from "../../lighthouse";
@@ -38,13 +39,15 @@ export const pollCartographer = async () => {
             receiveLocal: xTransfer.xparams!.receiveLocal,
             forceSlow: xTransfer.xparams!.forceSlow,
             recovery: xTransfer.xparams!.recovery,
-            slippageTol: xTransfer.xparams!.slippageTol,
+            destinationMinOut: xTransfer.xparams!.destinationMinOut,
             agent: xTransfer.xparams!.agent,
             relayerFee: xTransfer.xparams!.relayerFee,
           },
           local: xTransfer.destination!.assets.local.asset,
           routers: [],
           routerSignatures: [],
+          sequencer: constants.AddressZero,
+          sequencerSignature: "",
           amount: xTransfer.destination!.assets.local.amount.toString(),
           nonce: xTransfer.nonce!,
           originSender: xTransfer.origin!.xcall.caller,
