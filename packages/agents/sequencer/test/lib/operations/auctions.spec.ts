@@ -15,7 +15,7 @@ import Broker from "foo-foo-mq";
 
 import { ctxMock, getOperationsStub, getHelpersStub } from "../../globalTestHook";
 import { mock } from "../../mock";
-import { AuctionExpired, BidVersionInvalid, MissingXCall, ParamsInvalid } from "../../../src/lib/errors";
+import { AuctionExpired, RouterVersionInvalid, MissingXCall, ParamsInvalid } from "../../../src/lib/errors";
 import { executeAuction, storeBid } from "../../../src/lib/operations/auctions";
 import { getAllSubsets, getBidsRoundMap, getMinimumBidsCountForRound } from "../../../src/lib/helpers/auctions";
 
@@ -134,7 +134,7 @@ describe("Operations:Auctions", () => {
         ...mock.entity.bid(),
         routerVersion: "0.0",
       };
-      await expect(storeBid(invalidBid1, requestContext)).to.be.rejectedWith(BidVersionInvalid);
+      await expect(storeBid(invalidBid1, requestContext)).to.be.rejectedWith(RouterVersionInvalid);
     });
 
     it("should error if the auction has expired", async () => {

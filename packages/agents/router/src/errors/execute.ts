@@ -23,6 +23,11 @@ export class MissingXCall extends ExecuteError {
     super("Transfer is missing XCall information", context, MissingXCall.name);
   }
 }
+export class RouterVersionInvalid extends NxtpError {
+  constructor(context: any = {}) {
+    super(`Router version is not supported by the sequencer`, context, RouterVersionInvalid.name);
+  }
+}
 
 export class SenderChainDataInvalid extends ExecuteError {
   constructor(context: any = {}) {

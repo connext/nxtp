@@ -12,7 +12,7 @@ import {
 } from "@connext/nxtp-utils";
 import { compare } from "compare-versions";
 
-import { AuctionExpired, MissingXCall, ParamsInvalid, BidVersionInvalid } from "../errors";
+import { AuctionExpired, MissingXCall, ParamsInvalid, RouterVersionInvalid } from "../errors";
 import { getContext } from "../../sequencer";
 import { getHelpers } from "../helpers";
 import { Message } from "../entities";
@@ -44,7 +44,7 @@ export const storeBid = async (bid: Bid, _requestContext: RequestContext): Promi
   // check if bid router version is compatible with hosted sequencer
   const checkVersion = compare(bid.routerVersion, config.supportedBidVersion!, "<");
   if (checkVersion) {
-    throw new BidVersionInvalid({
+    throw new RouterVersionInvalid({
       supportedBidVersion: config.supportedBidVersion,
       bid,
     });

@@ -11,6 +11,8 @@ export const bindHealthServer = async (): Promise<FastifyInstance> => {
 
   server.get("/ping", (_, res) => api.get.ping(res));
 
+  server.get("/supportedBidVersion", (_, res) => api.get.supportedBidVersion(res));
+
   server.get("/metrics", (_, res) => api.get.metrics(res));
 
   const address = await server.listen({ port: config.server.sub.port, host: config.server.sub.host });
@@ -32,6 +34,10 @@ export const api = {
   get: {
     ping: async (res: FastifyReply) => {
       return res.status(200).send("pong\n");
+    },
+    supportedBidVersion: async (res: FastifyReply) => {
+      const { config } = getContext();
+      return res.status(200).send(config.supportedBidVersion);
     },
     metrics: async (res: FastifyReply) => {
       const { logger } = getContext();
