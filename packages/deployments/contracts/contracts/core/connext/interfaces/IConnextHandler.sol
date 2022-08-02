@@ -108,6 +108,7 @@ interface IConnextHandler is IDiamondLoupe, IDiamondCut {
 
   function onReceive(
     uint32 _origin,
+    bytes32 _sender,
     uint32 _tokenDomain,
     bytes32 _tokenAddress,
     address _localToken,

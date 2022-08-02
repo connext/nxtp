@@ -12,6 +12,7 @@ import {AssetLogic} from "../libraries/AssetLogic.sol";
 
 import {IAavePool} from "../interfaces/IAavePool.sol";
 import {IBridgeRouter} from "../interfaces/IBridgeRouter.sol";
+import {IBridgeHook} from "../interfaces/IBridgeHook.sol";
 
 import {BaseConnextFacet} from "./BaseConnextFacet.sol";
 
@@ -21,15 +22,16 @@ import {BaseConnextFacet} from "./BaseConnextFacet.sol";
  * the transfer
  *
  */
-contract NomadFacet is BaseConnextFacet {
+contract NomadFacet is BaseConnextFacet, IBridgeHook {
   // ============ Libraries ============
   using TypedMemView for bytes;
   using TypedMemView for bytes29;
 
   // ========== Custom Errors ===========
+  error NomadFacet__setBridgeRouter_invalidBridge();
+  error NomadFacet__reconcile_notConnext();
   error NomadFacet__reconcile_alreadyReconciled();
   error NomadFacet__reconcile_noPortalRouter();
-  error NomadFacet__setBridgeRouter_invalidBridge();
 
   // ============ Events ============
 
@@ -92,23 +94,34 @@ contract NomadFacet is BaseConnextFacet {
    * @dev Should be interface compatible with interface defined here:
    * https://github.com/nomad-xyz/monorepo/blob/main/packages/contracts-bridge/contracts/interfaces/IBridgeHook.sol
    *
+   * @param _origin - The origin domain
+   * @param _sender - The msg.sender of the original bridge call on origin domain
+   * @param _tokenDomain - The canonical domain of the token
+   * @param _tokenAddress - The canonical identifier of the token
    * @param _localToken - The address of the token representation on this domain, or the canonical
    * address if you are on the canonical domain
    * @param _amount - The amount bridged
    * @param _extraData - The extra data passed with the transfer on `sendToHook` (in this case transferId)
    */
   function onReceive(
-    uint32, // _origin, not used
+    uint32 _origin,
+    bytes32 _sender,
     uint32 _tokenDomain, // of canonical token not used
     bytes32 _tokenAddress, // of canonical token
     address _localToken,
     uint256 _amount,
     bytes memory _extraData
   ) external onlyBridgeRouter {
+    // Assert sender was the connext contract on the origin domain
+    if (s.connextions[_origin] != _sender) {
+      revert NomadFacet__reconcile_notConnext();
+    }
+
     // Calculate the transfer id
-    // NOTE: anyone can use nomad to send to this hook. that means instead of sending through the
-    // transferId directly, it should be reconstructed here with the information included in nomad.
-    // meaning all xcall, execute, and reconcile data must match
+    // NOTE: Rather than sending the transferId through directly, recalculate the information here, to ensure
+    // it was transported correctly to ensure all xcall, execute, and reconcile data must match. The sender
+    // is asserted to be the connext contract on that domain, so this check could be unneccessary, but since
+    // the implications of incorrectly transferred data are severe
     TransferIdInformation memory info = abi.decode(_extraData, (TransferIdInformation));
     bytes32 transferId = _calculateTransferId(
       info.params,

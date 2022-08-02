@@ -709,6 +709,7 @@ contract ConnextTest is ForgeHelper, Deployer {
     vm.prank(_destinationBridgeRouter);
     _destinationConnext.onReceive(
       _origin, // origin, not used
+      TypeCasts.addressToBytes32(address(_originConnext)),
       _canonicalDomain,
       TypeCasts.addressToBytes32(_canonical),
       _destinationLocal,

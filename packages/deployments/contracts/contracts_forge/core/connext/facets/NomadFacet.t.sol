@@ -35,6 +35,9 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
   // default origin sender
   address _originSender = address(4);
 
+  // set connextion
+  bytes32 _originConnext = TypeCasts.addressToBytes32(address(12365136));
+
   // relayer fee
   uint256 _relayerFee = 0.1 ether;
 
@@ -77,6 +80,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
     ds.contractOwner = _ds_owner;
     s.bridgeRouter = IBridgeRouter(_bridge);
+    s.connextions[_originDomain] = _originConnext;
   }
 
   // ============ Utils ============
@@ -121,18 +125,20 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
   function helpers_reconcileCaller(
     address _local,
     uint256 _amount,
+    bytes32 _bridgeCaller,
     CallParams memory params
   ) public {
     (uint32 canonicalDomain, bytes32 canonicalId) = s.tokenRegistry.getTokenId(_local);
     bytes memory data = abi.encode(TransferIdInformation(params, s.nonce, _originSender));
     vm.prank(_bridge);
-    this.onReceive(_originDomain, canonicalDomain, canonicalId, _local, _amount, data);
+    this.onReceive(_originDomain, _bridgeCaller, canonicalDomain, canonicalId, _local, _amount, data);
   }
 
   // Helper for calling `reconcile` and asserting expected behavior.
   function helpers_reconcileAndAssert(
     bytes32 transferId,
     XCallArgs memory args,
+    bytes32 _bridgeCaller,
     bytes4 expectedError
   ) public {
     bool shouldSucceed = keccak256(abi.encode(expectedError)) == keccak256(abi.encode(bytes4("")));
@@ -154,7 +160,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
       vm.expectRevert(expectedError);
     }
 
-    helpers_reconcileCaller(_local, args.transactingAmount, args.params);
+    helpers_reconcileCaller(_local, args.transactingAmount, _bridgeCaller, args.params);
 
     if (shouldSucceed) {
       assertEq(s.reconciledTransfers[transferId], true);
@@ -172,7 +178,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
 
   function helpers_reconcileAndAssert(bytes4 expectedError) public {
     (bytes32 transferId, XCallArgs memory args) = utils_makeXCallArgs();
-    helpers_reconcileAndAssert(transferId, args, expectedError);
+    helpers_reconcileAndAssert(transferId, args, _originConnext, expectedError);
   }
 
   // Shortcut for above method.
@@ -208,6 +214,26 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
 
   // ============ reconcile fail cases
 
+  // fails if not sent by connext
+  function test_NomadFacet__reconcile_failIfNotConnext() public {
+    utils_setupAsset(true, false);
+    (bytes32 transferId, XCallArgs memory args) = utils_makeXCallArgs();
+    (uint32 canonicalDomain, bytes32 canonicalId) = s.tokenRegistry.getTokenId(_local);
+
+    vm.expectRevert(NomadFacet.NomadFacet__reconcile_notConnext.selector);
+
+    vm.prank(_bridge);
+    this.onReceive(
+      _originDomain,
+      TypeCasts.addressToBytes32(address(1232)),
+      canonicalDomain,
+      canonicalId,
+      _local,
+      args.transactingAmount,
+      abi.encode(TransferIdInformation(args.params, s.nonce, _originSender))
+    );
+  }
+
   // fails if already reconciled (s.reconciledTransfers[transferId] = true)
   function test_NomadFacet__reconcile_failIfAlreadyReconciled() public {
     utils_setupAsset(true, false);
@@ -220,6 +246,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     vm.prank(_bridge);
     this.onReceive(
       _originDomain,
+      _originConnext,
       canonicalDomain,
       canonicalId,
       _local,
@@ -244,6 +271,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     vm.prank(_bridge);
     this.onReceive(
       _originDomain,
+      _originConnext,
       canonicalDomain,
       canonicalId,
       _local,
@@ -270,7 +298,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     (bytes32 transferId, XCallArgs memory args) = utils_makeXCallArgs();
     delete s.routedTransfers[transferId];
 
-    helpers_reconcileAndAssert(transferId, args, bytes4(""));
+    helpers_reconcileAndAssert(transferId, args, _originConnext, bytes4(""));
   }
 
   // funds router when post-execute (fast liquidity route)
@@ -278,7 +306,7 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     utils_setupAsset(true, false);
     (bytes32 transferId, XCallArgs memory args) = utils_makeXCallArgs();
     s.routedTransfers[transferId] = [address(42)];
-    helpers_reconcileAndAssert(transferId, args, bytes4(""));
+    helpers_reconcileAndAssert(transferId, args, _originConnext, bytes4(""));
   }
 
   // funds routers when post-execute multipath (fast liquidity route)
@@ -286,6 +314,6 @@ contract NomadFacetTest is NomadFacet, FacetHelper {
     utils_setupAsset(true, false);
     (bytes32 transferId, XCallArgs memory args) = utils_makeXCallArgs();
     s.routedTransfers[transferId] = [address(42), address(43), address(44), address(45)];
-    helpers_reconcileAndAssert(transferId, args, bytes4(""));
+    helpers_reconcileAndAssert(transferId, args, _originConnext, bytes4(""));
   }
 }
