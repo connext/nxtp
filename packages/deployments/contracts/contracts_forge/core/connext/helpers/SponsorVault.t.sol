@@ -3,7 +3,8 @@ pragma solidity 0.8.15;
 
 import "../../../utils/ForgeHelper.sol";
 
-import {SponsorVault, ITokenExchange, IGasTokenOracle} from "../../../../contracts/core/connext/helpers/SponsorVault.sol";
+import {SponsorVault, ITokenExchange, IGasTokenOracle, IPriceOracle} from "../../../../contracts/core/connext/helpers/SponsorVault.sol";
+import {ConnextPriceOracle} from "../../../../contracts/core/connext/helpers/ConnextPriceOracle.sol";
 
 import {TestERC20} from "../../../../contracts/test/TestERC20.sol";
 
@@ -42,6 +43,8 @@ contract SponsorVaultTest is ForgeHelper {
   event RelayerFeeCapUpdated(uint256 oldRelayerFeeCap, uint256 newRelayerFeeCap, address caller);
   event GasTokenOracleUpdated(address oldOracle, address newOracle, address caller);
   event TokenExchangeUpdated(address token, address oldTokenExchange, address newTokenExchange, address caller);
+  event PriceOracleUpdated(address oldOracle, address newOracle, address caller);
+  event MaxPriceDiffPercentUpdated(uint256 oldRelayerFeeCap, uint256 newRelayerFeeCap, address caller);
   event Deposit(address token, uint256 amount, address caller);
   event Withdraw(address token, address receiver, uint256 amount, address caller);
   event ReimburseLiquidityFees(address token, uint256 amount, address receiver);
@@ -54,6 +57,7 @@ contract SponsorVaultTest is ForgeHelper {
   address connext = address(this);
   address gasTokenOracle = address(1);
   MockTokenExchange tokenExchange;
+  IPriceOracle priceOracle;
   address gasPriceOracle = address(2);
   uint32 originDomain = 1;
   TestERC20 localToken;
@@ -70,6 +74,9 @@ contract SponsorVaultTest is ForgeHelper {
     tokenExchange = new MockTokenExchange();
 
     vault = new SponsorVault(connext);
+
+    priceOracle = IPriceOracle(address(new ConnextPriceOracle(address(1))));
+    vault.setPriceOracle(address(priceOracle));
 
     localToken.approve(address(vault), type(uint256).max);
     localToken2.approve(address(vault), type(uint256).max);
@@ -227,9 +234,57 @@ contract SponsorVaultTest is ForgeHelper {
     assertEq(address(vault.tokenExchanges(_token)), _tokenExchange);
   }
 
+  // ============ setPriceOracle ============
+
+  function test_SponsorVault__setPriceOracle_failsIfNotOwner() public {
+    vm.prank(address(0));
+    vm.expectRevert("Ownable: caller is not the owner");
+
+    vault.setPriceOracle(address(3));
+  }
+
+  function test_SponsorVault__setPriceOracle_works(address _priceOracle) public {
+    address currOracle = address(vault.priceOracle());
+
+    vm.expectEmit(true, true, true, true);
+    emit PriceOracleUpdated(currOracle, _priceOracle, address(this));
+
+    vault.setPriceOracle(_priceOracle);
+
+    assertEq(address(vault.priceOracle()), _priceOracle);
+  }
+
+  // ============ setMaxPriceDiffPercent ============
+
+  function test_SponsorVault__setMaxPriceDiffPercent_failsIfNotOwner() public {
+    vm.prank(address(0));
+    vm.expectRevert("Ownable: caller is not the owner");
+
+    vault.setMaxPriceDiffPercent(1);
+  }
+
+  function test_SponsorVault__setMaxPriceDiffPercent_failsIfTooLarge() public {
+    vm.expectRevert(abi.encodeWithSelector(SponsorVault.SponsorVault__setMaxPriceDiffPercent_tooLarge.selector));
+
+    vault.setMaxPriceDiffPercent(50);
+  }
+
+  function test_SponsorVault__setMaxPriceDiffPercent_works(uint256 _maxPriceDiffPercent) public {
+    vm.assume(_maxPriceDiffPercent < 30);
+    uint256 currMaxPriceDiffPercent = vault.maxPriceDiffPercent();
+
+    vm.expectEmit(true, true, true, true);
+    emit MaxPriceDiffPercentUpdated(currMaxPriceDiffPercent, _maxPriceDiffPercent, address(this));
+
+    vault.setMaxPriceDiffPercent(_maxPriceDiffPercent);
+
+    assertEq(vault.maxPriceDiffPercent(), _maxPriceDiffPercent);
+  }
+
   // ============ deposit ============
   function test_SponsorVault__deposit_works_adding_native_token(uint256 _amount) public {
     vm.assume(address(this).balance >= _amount);
+    vm.assume(_amount > 0);
 
     uint256 balanceBefore = address(vault).balance;
 
@@ -336,6 +391,7 @@ contract SponsorVaultTest is ForgeHelper {
   {
     tokenExchange.setSwapResult(1);
     vault.setTokenExchange(address(localToken), payable(address(tokenExchange)));
+    vault.setLiquidityFeeCap(address(localToken), 1 ether);
 
     uint256 balanceBefore = address(vault).balance;
 
@@ -343,6 +399,16 @@ contract SponsorVaultTest is ForgeHelper {
       address(tokenExchange),
       abi.encodeWithSelector(ITokenExchange.getInGivenExpectedOut.selector),
       abi.encode(uint256(balanceBefore + 1))
+    );
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(0)),
+      abi.encode(10)
+    );
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(localToken)),
+      abi.encode(1)
     );
 
     vm.expectEmit(true, true, true, true);
@@ -359,6 +425,7 @@ contract SponsorVaultTest is ForgeHelper {
   {
     uint256 liquidityFee = 500;
     tokenExchange.setSwapResult(500);
+    vault.setLiquidityFeeCap(address(localToken), 1 ether);
     uint256 amountIn = tokenExchange.getInGivenExpectedOut(address(localToken), liquidityFee);
 
     vault.setTokenExchange(address(localToken), payable(address(tokenExchange)));
@@ -368,6 +435,16 @@ contract SponsorVaultTest is ForgeHelper {
     vm.expectCall(
       address(tokenExchange),
       abi.encodeWithSelector(ITokenExchange.swapExactIn.selector, address(localToken), address(this))
+    );
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(0)),
+      abi.encode(98)
+    );
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(localToken)),
+      abi.encode(10)
     );
 
     vm.expectEmit(true, true, true, true);
@@ -384,6 +461,7 @@ contract SponsorVaultTest is ForgeHelper {
   {
     uint256 liquidityFee = 500;
     tokenExchange.setSwapResult(500 - 5);
+    vault.setLiquidityFeeCap(address(localToken), 1 ether);
     uint256 amountIn = tokenExchange.getInGivenExpectedOut(address(localToken), liquidityFee);
 
     vault.setTokenExchange(address(localToken), payable(address(tokenExchange)));
@@ -393,6 +471,17 @@ contract SponsorVaultTest is ForgeHelper {
     vm.expectCall(
       address(tokenExchange),
       abi.encodeWithSelector(ITokenExchange.swapExactIn.selector, address(localToken), address(this))
+    );
+
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(0)),
+      abi.encode(98)
+    );
+    vm.mockCall(
+      address(priceOracle),
+      abi.encodeWithSelector(IPriceOracle.getPriceFromChainlink.selector, address(localToken)),
+      abi.encode(10)
     );
 
     vm.expectEmit(true, true, true, true);
@@ -406,6 +495,7 @@ contract SponsorVaultTest is ForgeHelper {
 
   function test_SponsorVault__reimburseLiquidityFees_should_work_with_no_tokenExchange_but_token_balance() public {
     uint256 liquidityFee = 500;
+    vault.setLiquidityFeeCap(address(localToken), 1 ether);
 
     assertEq(address(vault.tokenExchanges(address(1))), address(0));
 
@@ -427,6 +517,7 @@ contract SponsorVaultTest is ForgeHelper {
   {
     uint256 balanceLocalBefore = localToken.balanceOf(address(vault));
     uint256 liquidityFee = balanceLocalBefore + 10;
+    vault.setLiquidityFeeCap(address(localToken), 100 ether);
 
     assertEq(address(vault.tokenExchanges(address(1))), address(0));
 
@@ -440,6 +531,27 @@ contract SponsorVaultTest is ForgeHelper {
     assertEq(sponsored, balanceLocalBefore);
     assertEq(address(vault).balance, balanceBefore);
     assertEq(localToken.balanceOf(address(vault)), 0);
+  }
+
+  function test_SponsorVault__reimburseLiquidityFees_onlyReimbursesToMax() public {
+    uint256 balanceLocalBefore = localToken.balanceOf(address(vault));
+    uint256 liquidityFee = balanceLocalBefore + 10;
+    uint256 liquidityCap = 2;
+    vault.setLiquidityFeeCap(address(localToken), liquidityCap);
+
+    assertEq(address(vault.tokenExchanges(address(1))), address(0));
+
+    uint256 balanceBefore = address(vault).balance;
+
+    vm.expectEmit(true, true, true, true);
+    emit ReimburseLiquidityFees(address(localToken), liquidityCap, address(1));
+
+    uint256 sponsored = vault.reimburseLiquidityFees(address(localToken), liquidityFee, address(1));
+
+    assertEq(sponsored, liquidityCap);
+    assertEq(address(vault).balance, balanceBefore);
+    assertEq(localToken.balanceOf(address(vault)), balanceLocalBefore - liquidityCap);
+    assertEq(vault.reimbursedLiquidityFees(address(1), address(localToken)), liquidityCap);
   }
 
   // ============ reimburseRelayerFees ============
@@ -560,6 +672,36 @@ contract SponsorVaultTest is ForgeHelper {
     vm.expectCall(address(gasTokenOracle), abi.encodeWithSelector(IGasTokenOracle.getRate.selector, originDomain));
 
     uint256 expectedFee = ((relayerFee * gasTokenOracleRate.num) / gasTokenOracleRate.den);
+
+    vm.expectEmit(true, true, true, true);
+    emit ReimburseRelayerFees(expectedFee, to);
+
+    vault.reimburseRelayerFees(originDomain, payable(to), relayerFee);
+
+    assertEq(to.balance, balanceBefore + expectedFee);
+  }
+
+  function test_SponsorVault__reimburseRelayerFees_shouldHandleBadGasOracle() public {
+    uint256 relayerFeeCap = 1000;
+    uint256 relayerFee = 500;
+    address to = address(10);
+
+    vault.setRelayerFeeCap(relayerFeeCap);
+    vault.setGasTokenOracle(gasTokenOracle);
+
+    uint256 balanceBefore = to.balance;
+
+    SponsorVault.Rate memory gasTokenOracleRate = SponsorVault.Rate({num: 1, den: 0});
+
+    vm.mockCall(
+      address(gasTokenOracle),
+      abi.encodeWithSelector(IGasTokenOracle.getRate.selector),
+      abi.encode(gasTokenOracleRate)
+    );
+
+    vm.expectCall(address(gasTokenOracle), abi.encodeWithSelector(IGasTokenOracle.getRate.selector, originDomain));
+
+    uint256 expectedFee = 0;
 
     vm.expectEmit(true, true, true, true);
     emit ReimburseRelayerFees(expectedFee, to);

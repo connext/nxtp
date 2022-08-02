@@ -212,7 +212,7 @@ contract StableSwapFacetTest is FacetHelper, StableSwapFacet, SwapAdminFacet {
     this.calculateSwapTokenAmount(bytes32(0), _amounts, true);
 
     _amounts[0] = this.getSwapTokenBalance(_canonicalId, 0) + 1;
-    vm.expectRevert("withdraw >available");
+    vm.expectRevert(stdError.arithmeticError);
     this.calculateSwapTokenAmount(_canonicalId, _amounts, false);
   }
 

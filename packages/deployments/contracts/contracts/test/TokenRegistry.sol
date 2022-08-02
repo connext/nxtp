@@ -2,19 +2,20 @@
 pragma solidity 0.8.15;
 
 // import {TypedMemView} from "@summa-tx/memview-sol/contracts/TypedMemView.sol";
-import {TypedMemView} from "../../../nomad-core/libs/TypedMemView.sol";
-import {TypeCasts} from "../../../nomad-core/contracts/XAppConnectionManager.sol";
-import {UpgradeBeaconProxy} from "../../../nomad-core/contracts/upgrade/UpgradeBeaconProxy.sol";
+import {TypedMemView} from "../nomad-core/libs/TypedMemView.sol";
+import {TypeCasts} from "../nomad-core/contracts/XAppConnectionManager.sol";
+import {UpgradeBeaconProxy} from "../nomad-core/contracts/upgrade/UpgradeBeaconProxy.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import {ConnextMessage} from "../libraries/ConnextMessage.sol";
-import {Encoding} from "../libraries/Encoding.sol";
-import {XAppConnectionClient} from "../../shared/XAppConnectionClient.sol";
+import {TokenId} from "../core/connext/libraries/LibConnextStorage.sol";
+import {XAppConnectionClient} from "../core/shared/XAppConnectionClient.sol";
+import {ITokenRegistry} from "../core/connext/interfaces/ITokenRegistry.sol";
 
-import {ITokenRegistry} from "../interfaces/ITokenRegistry.sol";
-import {IBridgeToken} from "../interfaces/IBridgeToken.sol";
+import {Encoding} from "./Encoding.sol";
+import {BridgeMessage} from "./BridgeMessage.sol";
+import {IBridgeToken} from "./IBridgeToken.sol";
 
 /**
  * @title TokenRegistry
@@ -37,7 +38,6 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
 
   using TypedMemView for bytes;
   using TypedMemView for bytes29;
-  using ConnextMessage for bytes29;
 
   // ============ Public Storage ============
   uint32 private _local;
@@ -45,7 +45,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
   // UpgradeBeacon from which new token proxies will get their implementation
   address public tokenBeacon;
   // local representation token address => token ID
-  mapping(address => ConnextMessage.TokenId) public representationToCanonical;
+  mapping(address => TokenId) public representationToCanonical;
   // hash of the tightly-packed TokenId => local representation token address
   // If the token is of local origin, this MUST map to address(0).
   mapping(bytes32 => address) public canonicalToRepresentation;
@@ -84,7 +84,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
    * @return _id the identifier of the canonical version in its domain.
    */
   function getCanonicalTokenId(address _representation) external view returns (uint32 _domain, bytes32 _id) {
-    ConnextMessage.TokenId memory _canonical = representationToCanonical[_representation];
+    TokenId memory _canonical = representationToCanonical[_representation];
     _domain = _canonical.domain;
     _id = _canonical.id;
   }
@@ -96,7 +96,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
    * @return _representation the address of the representation contract
    */
   function getRepresentationAddress(uint32 _domain, bytes32 _id) public view returns (address _representation) {
-    bytes29 _tokenId = ConnextMessage.formatTokenId(_domain, _id);
+    bytes29 _tokenId = BridgeMessage.formatTokenId(_domain, _id);
     bytes32 _idHash = _tokenId.keccak();
     _representation = canonicalToRepresentation[_idHash];
   }
@@ -159,7 +159,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
    */
   function oldReprToCurrentRepr(address _oldRepr) external view override returns (address _currentRepr) {
     // get the canonical token ID for the old representation contract
-    ConnextMessage.TokenId memory _tokenId = representationToCanonical[_oldRepr];
+    TokenId memory _tokenId = representationToCanonical[_oldRepr];
     require(_tokenId.domain != 0, "!repr");
     // get the current primary representation for the same canonical token ID
     _currentRepr = getRepresentationAddress(_tokenId.domain, _tokenId.id);
@@ -174,7 +174,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
    * @return _id canonical identifier on that domain
    */
   function getTokenId(address _token) external view override returns (uint32 _domain, bytes32 _id) {
-    ConnextMessage.TokenId memory _tokenId = representationToCanonical[_token];
+    TokenId memory _tokenId = representationToCanonical[_token];
     if (_tokenId.domain == 0) {
       _domain = _localDomain();
       _id = TypeCasts.addressToBytes32(_token);
@@ -279,7 +279,7 @@ contract TokenRegistry is Initializable, XAppConnectionClient, ITokenRegistry {
     bytes32 _id,
     address _representation
   ) internal {
-    bytes29 _tokenId = ConnextMessage.formatTokenId(_domain, _id);
+    bytes29 _tokenId = BridgeMessage.formatTokenId(_domain, _id);
     bytes32 _idHash = _tokenId.keccak();
     canonicalToRepresentation[_idHash] = _representation;
   }

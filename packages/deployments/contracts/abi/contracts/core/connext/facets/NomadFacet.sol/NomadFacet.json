@@ -1,20 +1,15 @@
 [
-  "error AssetLogic__getTokenIndexFromStableSwapPool_notExist()",
   "error BaseConnextFacet__nonReentrant_reentrantCall()",
+  "error BaseConnextFacet__onlyBridgeRouter_notBridgeRouter()",
   "error BaseConnextFacet__onlyOwner_notOwner()",
   "error BaseConnextFacet__onlyProposed_notProposedOwner()",
-  "error BaseConnextFacet__onlyRemoteRouter_notRemoteRouter()",
-  "error BaseConnextFacet__onlyReplica_notReplica()",
   "error BaseConnextFacet__whenNotPaused_paused()",
   "error NomadFacet__reconcile_alreadyReconciled()",
-  "error NomadFacet__reconcile_invalidAction()",
   "error NomadFacet__reconcile_noPortalRouter()",
-  "event AavePortalRepayment(bytes32 indexed,address,uint256,uint256)",
-  "event AavePortalRepaymentDebt(bytes32 indexed,address,uint256,uint256)",
-  "event Reconciled(bytes32 indexed,uint32 indexed,address[],address,uint256,address)",
-  "function enrollRemoteRouter(uint32,bytes32)",
-  "function handle(uint32,uint32,bytes32,bytes)",
-  "function remotes(uint32) view returns (bytes32)",
-  "function setXAppConnectionManager(address)",
-  "function xAppConnectionManager() view returns (address)"
+  "error NomadFacet__setBridgeRouter_invalidBridge()",
+  "event BridgeRouterUpdated(address,address,address)",
+  "event Reconciled(bytes32 indexed,address[],address,uint256,address)",
+  "function bridgeRouter() view returns (address)",
+  "function onReceive(uint32,uint32,bytes32,address,uint256,bytes)",
+  "function setBridgeRouter(address)"
 ]

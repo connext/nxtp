@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.15;
 
-import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import {IStableSwap} from "../interfaces/IStableSwap.sol";
-import {AmplificationUtils, SwapUtils} from "../libraries/AmplificationUtils.sol";
+import {SwapUtilsExternal as SwapUtils} from "../libraries/SwapUtilsExternal.sol";
 
 import {OwnerPausableUpgradeable} from "./OwnerPausableUpgradeable.sol";
 import {LPToken} from "./LPToken.sol";
@@ -29,9 +29,7 @@ import {LPToken} from "./LPToken.sol";
  * deployment size.
  */
 contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpgradeable {
-  using SafeERC20 for IERC20;
   using SwapUtils for SwapUtils.Swap;
-  using AmplificationUtils for SwapUtils.Swap;
 
   // ============ Upgrade Gap ============
 
@@ -101,7 +99,7 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
     }
 
     // Check _a, _fee, _adminFee, _withdrawFee parameters
-    require(_a < AmplificationUtils.MAX_A, "_a exceeds maximum");
+    require(_a < SwapUtils.MAX_A, "_a exceeds maximum");
     require(_fee < SwapUtils.MAX_SWAP_FEE, "_fee exceeds maximum");
     require(_adminFee < SwapUtils.MAX_ADMIN_FEE, "_adminFee exceeds maximum");
 
@@ -115,8 +113,8 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
     swapStorage.tokenPrecisionMultipliers = precisionMultipliers;
     swapStorage.balances = new uint256[](_pooledTokens.length);
     swapStorage.adminFees = new uint256[](_pooledTokens.length);
-    swapStorage.initialA = _a * AmplificationUtils.A_PRECISION;
-    swapStorage.futureA = _a * AmplificationUtils.A_PRECISION;
+    swapStorage.initialA = _a * SwapUtils.A_PRECISION;
+    swapStorage.futureA = _a * SwapUtils.A_PRECISION;
     // swapStorage.initialATime = 0;
     // swapStorage.futureATime = 0;
     swapStorage.swapFee = _fee;
@@ -196,6 +194,37 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
 
   /**
    * @notice Calculate amount of tokens you receive on swap
+   * @param tokenIndexFrom the token the user wants to sell
+   * @param tokenIndexTo the token the user wants to buy
+   * @param dx the amount of tokens the user wants to sell. If the token charges
+   * a fee on transfers, use the amount that gets transferred after the fee.
+   * @return amount of tokens the user will receive
+   */
+  function calculateSwap(
+    uint8 tokenIndexFrom,
+    uint8 tokenIndexTo,
+    uint256 dx
+  ) external view override returns (uint256) {
+    return swapStorage.calculateSwap(tokenIndexFrom, tokenIndexTo, dx);
+  }
+
+  /**
+   * @notice Calculate amount of tokens you receive on swap
+   * @param tokenIndexFrom the token the user wants to sell
+   * @param tokenIndexTo the token the user wants to buy
+   * @param dy the amount of tokens the user wants to buy
+   * @return amount of tokens the user have to transfer
+   */
+  function calculateSwapOut(
+    uint8 tokenIndexFrom,
+    uint8 tokenIndexTo,
+    uint256 dy
+  ) external view override returns (uint256) {
+    return swapStorage.calculateSwapInv(tokenIndexFrom, tokenIndexTo, dy);
+  }
+
+  /**
+   * @notice Calculate amount of tokens you receive on swap
    * @param assetIn the token the user wants to swap from
    * @param assetOut the token the user wants to swap to
    * @param amountIn the amount of tokens the user wants to swap from
@@ -213,22 +242,6 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
 
   /**
    * @notice Calculate amount of tokens you receive on swap
-   * @param tokenIndexFrom the token the user wants to sell
-   * @param tokenIndexTo the token the user wants to buy
-   * @param dx the amount of tokens the user wants to sell. If the token charges
-   * a fee on transfers, use the amount that gets transferred after the fee.
-   * @return amount of tokens the user will receive
-   */
-  function calculateSwap(
-    uint8 tokenIndexFrom,
-    uint8 tokenIndexTo,
-    uint256 dx
-  ) external view override returns (uint256) {
-    return swapStorage.calculateSwap(tokenIndexFrom, tokenIndexTo, dx);
-  }
-
-  /**
-   * @notice Calculate amount of tokens you receive on swap
    * @param assetIn the token the user wants to swap from
    * @param assetOut the token the user wants to swap to
    * @param amountOut the amount of tokens the user wants to swap to
@@ -242,21 +255,6 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
     uint8 tokenIndexFrom = getTokenIndex(assetIn);
     uint8 tokenIndexTo = getTokenIndex(assetOut);
     return swapStorage.calculateSwapInv(tokenIndexFrom, tokenIndexTo, amountOut);
-  }
-
-  /**
-   * @notice Calculate amount of tokens you receive on swap
-   * @param tokenIndexFrom the token the user wants to sell
-   * @param tokenIndexTo the token the user wants to buy
-   * @param dy the amount of tokens the user wants to buy
-   * @return amount of tokens the user have to transfer
-   */
-  function calculateSwapOut(
-    uint8 tokenIndexFrom,
-    uint8 tokenIndexTo,
-    uint256 dy
-  ) external view override returns (uint256) {
-    return swapStorage.calculateSwapInv(tokenIndexFrom, tokenIndexTo, dy);
   }
 
   /**
@@ -345,8 +343,9 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
     uint256 amountIn,
     address assetIn,
     address assetOut,
-    uint256 minAmountOut
-  ) external payable override nonReentrant whenNotPaused returns (uint256) {
+    uint256 minAmountOut,
+    uint256 deadline
+  ) external payable override nonReentrant whenNotPaused deadlineCheck(deadline) returns (uint256) {
     uint8 tokenIndexFrom = getTokenIndex(assetIn);
     uint8 tokenIndexTo = getTokenIndex(assetOut);
     return swapStorage.swap(tokenIndexFrom, tokenIndexTo, amountIn, minAmountOut);
@@ -363,8 +362,9 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
     uint256 amountOut,
     address assetIn,
     address assetOut,
-    uint256 maxAmountIn
-  ) external payable override nonReentrant whenNotPaused returns (uint256) {
+    uint256 maxAmountIn,
+    uint256 deadline
+  ) external payable override nonReentrant whenNotPaused deadlineCheck(deadline) returns (uint256) {
     uint8 tokenIndexFrom = getTokenIndex(assetIn);
     uint8 tokenIndexTo = getTokenIndex(assetOut);
     return swapStorage.swapOut(tokenIndexFrom, tokenIndexTo, amountOut, maxAmountIn);
@@ -445,7 +445,7 @@ contract StableSwap is IStableSwap, OwnerPausableUpgradeable, ReentrancyGuardUpg
   /**
    * @notice Withdraw all admin fees to the contract owner
    */
-  function withdrawAdminFees() external onlyOwner {
+  function withdrawAdminFees() external nonReentrant onlyOwner {
     swapStorage.withdrawAdminFees(owner());
   }
 

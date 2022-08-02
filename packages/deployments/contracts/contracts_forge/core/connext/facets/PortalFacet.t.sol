@@ -9,7 +9,7 @@ import {IDiamondCut} from "../../../../contracts/core/connext/interfaces/IDiamon
 
 import {BaseConnextFacet} from "../../../../contracts/core/connext/facets/BaseConnextFacet.sol";
 import {LibDiamond} from "../../../../contracts/core/connext/libraries/LibDiamond.sol";
-import {ConnextMessage} from "../../../../contracts/core/connext/libraries/ConnextMessage.sol";
+import {CallParams} from "../../../../contracts/core/connext/libraries/LibConnextStorage.sol";
 import {PortalFacet} from "../../../../contracts/core/connext/facets/PortalFacet.sol";
 import {TestAavePool} from "../../../../contracts/test/TestAavePool.sol";
 import {TestERC20} from "../../../../contracts/test/TestERC20.sol";
@@ -18,6 +18,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../../../utils/Mock.sol";
 import "../../../utils/FacetHelper.sol";
+
+import "forge-std/console.sol";
 
 contract PortalFacetTest is PortalFacet, FacetHelper {
   // ============ Storage ============
@@ -28,7 +30,11 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
   address router = address(1111);
   address aavePool;
 
-  bytes32 _id = bytes32(abi.encodePacked(address(123)));
+  bytes32 transferId;
+  CallParams params;
+  address originSender = address(1232123);
+  uint256 bridgedAmt = 1 ether;
+  uint256 nonce = 89;
 
   // ============ Test set up ============
 
@@ -46,6 +52,50 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     aavePool = address(new MockPool(false));
     // set pool
     s.aavePool = aavePool;
+
+    params = CallParams(
+      address(11), // to
+      bytes(""), // callData
+      _originDomain, // origin domain
+      _destinationDomain, // destination domain
+      address(222222222), // agent
+      address(6666666), // recovery address
+      false, // forceSlow
+      false, // receiveLocal
+      address(0), // callback
+      0, // callbackFee
+      0, // relayer fee
+      1 ether // destinationMinOut
+    );
+
+    // set default transfer id
+    transferId = utils_calculateTransferId();
+  }
+
+  // ============ Test utils ============
+
+  function utils_calculateTransferId() public returns (bytes32) {
+    console.log("canonical id");
+    console.logBytes32(_canonicalId);
+    return keccak256(abi.encode(nonce, params, originSender, _canonicalId, _canonicalDomain, bridgedAmt));
+  }
+
+  function utils_repayPortal(
+    CallParams memory p,
+    uint256 _backingAmount,
+    uint256 _feeAmount,
+    uint256 _maxIn
+  ) public {
+    this.repayAavePortal(p, _local, originSender, bridgedAmt, nonce, _backingAmount, _feeAmount, _maxIn);
+  }
+
+  function utils_repayPortalFor(
+    CallParams memory p,
+    address _adopted,
+    uint256 _backingAmount,
+    uint256 _feeAmount
+  ) public {
+    this.repayAavePortalFor(p, _adopted, originSender, bridgedAmt, nonce, _backingAmount, _feeAmount);
   }
 
   // ============ setAavePool ============
@@ -111,8 +161,8 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     // set liquidity
     uint256 init = 10 ether;
     s.routerBalances[router][_local] = init;
-    s.portalDebt[_id] = backing;
-    s.portalFeeDebt[_id] = fee;
+    s.portalDebt[transferId] = backing;
+    s.portalFeeDebt[transferId] = fee;
     assertTrue(IERC20(_local).balanceOf(address(this)) > init);
 
     // set mock for backing
@@ -122,9 +172,9 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     vm.expectCall(_local, abi.encodeWithSelector(IERC20.approve.selector, aavePool, backing + fee));
     vm.expectCall(aavePool, abi.encodeWithSelector(IAavePool.backUnbacked.selector, _local, backing, fee));
     vm.expectEmit(true, true, true, true);
-    emit AavePortalRouterRepayment(router, _local, backing, fee);
+    emit AavePortalRepayment(transferId, _local, backing, fee, router);
     vm.prank(router);
-    this.repayAavePortal(_local, backing, fee, backing, _id);
+    utils_repayPortal(params, backing, fee, backing);
 
     // assert balance decrement
     assertEq(s.routerBalances[router][_local], init - backing - fee);
@@ -145,7 +195,7 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     // call coming from router
     vm.prank(router);
     vm.expectRevert(abi.encodeWithSelector(PortalFacet.PortalFacet__repayAavePortal_insufficientFunds.selector));
-    this.repayAavePortal(_local, backing, fee, backing, _id);
+    utils_repayPortal(params, backing, fee, backing);
   }
 
   // fails if swap failed
@@ -175,7 +225,7 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     // call coming from router
     vm.prank(router);
     vm.expectRevert(abi.encodeWithSelector(PortalFacet.PortalFacet__repayAavePortal_swapFailed.selector));
-    this.repayAavePortal(_local, backing, fee, maxIn, _id);
+    utils_repayPortal(params, backing, fee, maxIn);
   }
 
   function test_PortalFacet__repayAavePortal_failsIfRepalyTooMuch() public {
@@ -194,8 +244,8 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     uint256 init = maxIn + 1;
 
     s.routerBalances[router][_local] = init;
-    s.portalDebt[_id] = backing - 1;
-    s.portalFeeDebt[_id] = fee - 1;
+    s.portalDebt[transferId] = backing - 1;
+    s.portalFeeDebt[transferId] = fee - 1;
 
     // set liquidity
     s.routerBalances[router][_local] = maxIn + 1;
@@ -213,7 +263,7 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
 
     vm.expectRevert(stdError.arithmeticError);
     vm.prank(router);
-    this.repayAavePortal(_local, backing, fee, maxIn, _id);
+    utils_repayPortal(params, backing, fee, maxIn);
 
     // assert balance decrement
     assertEq(s.routerBalances[router][_local], init);
@@ -222,6 +272,7 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
   function test_PortalFacet__repayAavePortal_shouldWorkUsingSwap() public {
     // we are on the destination domain where local != canonical
     utils_setupAsset(false, false);
+    transferId = utils_calculateTransferId();
 
     // set approval context
     s.routerPermissionInfo.approvedForPortalRouters[router] = true;
@@ -235,8 +286,8 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     uint256 init = maxIn + 1;
 
     s.routerBalances[router][_local] = init;
-    s.portalDebt[_id] = backing;
-    s.portalFeeDebt[_id] = fee;
+    s.portalDebt[transferId] = backing;
+    s.portalFeeDebt[transferId] = fee;
 
     // set liquidity
     s.routerBalances[router][_local] = maxIn + 1;
@@ -256,9 +307,9 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     vm.expectCall(_adopted, abi.encodeWithSelector(IERC20.approve.selector, aavePool, backing + fee));
     vm.expectCall(aavePool, abi.encodeWithSelector(IAavePool.backUnbacked.selector, _adopted, backing, fee));
     vm.expectEmit(true, true, true, true);
-    emit AavePortalRouterRepayment(router, _adopted, backing, fee);
+    emit AavePortalRepayment(transferId, _adopted, backing, fee, router);
     vm.prank(router);
-    this.repayAavePortal(_local, backing, fee, maxIn, _id);
+    utils_repayPortal(params, backing, fee, maxIn);
 
     // assert balance decrement
     assertEq(s.routerBalances[router][_local], init - amountIn);
@@ -279,7 +330,7 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     assertTrue(adopted != _adopted);
 
     vm.expectRevert(abi.encodeWithSelector(PortalFacet.PortalFacet__repayAavePortalFor_notSupportedAsset.selector));
-    this.repayAavePortalFor(adopted, backing, fee, _id);
+    utils_repayPortalFor(params, adopted, backing, fee);
   }
 
   // fails if zero amount
@@ -292,21 +343,22 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     utils_setupAsset(false, false);
 
     vm.expectRevert(abi.encodeWithSelector(PortalFacet.PortalFacet__repayAavePortalFor_zeroAmount.selector));
-    this.repayAavePortalFor(_adopted, backing, fee, _id);
+    utils_repayPortalFor(params, _adopted, backing, fee);
   }
 
   // should work
   function test_PortalFacet__repayAavePortalFor_shouldWork() public {
     // we are on the destination domain where local != canonical
     utils_setupAsset(false, false);
+    transferId = utils_calculateTransferId();
 
     // set debt amount
     uint256 backing = 1111;
     uint256 fee = 111;
     uint256 total = backing + fee;
 
-    s.portalDebt[_id] = backing;
-    s.portalFeeDebt[_id] = fee;
+    s.portalDebt[transferId] = backing;
+    s.portalFeeDebt[transferId] = fee;
 
     // mint initial balance to sender and approve
     address sender = address(111);
@@ -318,13 +370,14 @@ contract PortalFacetTest is PortalFacet, FacetHelper {
     vm.expectCall(_adopted, abi.encodeWithSelector(IERC20.approve.selector, aavePool, total));
     vm.expectCall(aavePool, abi.encodeWithSelector(IAavePool.backUnbacked.selector, _adopted, backing, fee));
     vm.expectEmit(true, true, true, true);
-    emit AavePortalRouterRepayment(sender, _adopted, backing, fee);
+    emit AavePortalRepayment(transferId, _adopted, backing, fee, sender);
     vm.prank(sender);
-    this.repayAavePortalFor(_adopted, backing, fee, _id);
+    utils_repayPortalFor(params, _adopted, backing, fee);
+    console.log("repaid");
 
     // assert balance decrement
     assertEq(IERC20(_adopted).balanceOf(sender), 0);
-    assertEq(s.portalDebt[_id], 0);
-    assertEq(s.portalFeeDebt[_id], 0);
+    assertEq(s.portalDebt[transferId], 0);
+    assertEq(s.portalFeeDebt[transferId], 0);
   }
 }

@@ -7,44 +7,53 @@ import {XAppConnectionManager} from "../../../nomad-core/contracts/XAppConnectio
 import {RelayerFeeRouter} from "../../relayer-fee/RelayerFeeRouter.sol";
 import {PromiseRouter} from "../../promise/PromiseRouter.sol";
 
-import {ConnextMessage} from "../libraries/ConnextMessage.sol";
-import {XCallArgs, ExecuteArgs, CallParams} from "../libraries/LibConnextStorage.sol";
+import {XCallArgs, ExecuteArgs, CallParams, TokenId} from "../libraries/LibConnextStorage.sol";
+import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {SwapUtils} from "../libraries/SwapUtils.sol";
 
 import {IStableSwap} from "./IStableSwap.sol";
-import {ITokenRegistry} from "./ITokenRegistry.sol";
-import {IWrapped} from "./IWrapped.sol";
 import {IExecutor} from "./IExecutor.sol";
 import {ISponsorVault} from "./ISponsorVault.sol";
+import {IWeth} from "./IWeth.sol";
+import {ITokenRegistry} from "./ITokenRegistry.sol";
+import {IBridgeRouter} from "./IBridgeRouter.sol";
 
 import {IDiamondCut} from "./IDiamondCut.sol";
+import {IDiamondLoupe} from "./IDiamondLoupe.sol";
 
-interface IConnextHandler {
+interface IConnextHandler is IDiamondLoupe, IDiamondCut {
   // AssetFacet
-  function canonicalToAdopted(bytes32 _canonicalId) external view returns (address);
+  function canonicalToAdopted(bytes32 _key) external view returns (address);
 
-  function adoptedToCanonical(address _adopted) external view returns (ConnextMessage.TokenId memory);
+  function canonicalToAdopted(TokenId calldata _canonical) external view returns (address);
 
-  function approvedAssets(bytes32 _asset) external view returns (bool);
+  function adoptedToCanonical(address _adopted) external view returns (TokenId memory);
 
-  function adoptedToLocalPools(bytes32 _adopted) external view returns (IStableSwap);
+  function approvedAssets(bytes32 _key) external view returns (bool);
+
+  function approvedAssets(TokenId calldata _canonical) external view returns (bool);
+
+  function adoptedToLocalPools(bytes32 _key) external view returns (IStableSwap);
+
+  function adoptedToLocalPools(TokenId calldata _canonical) external view returns (IStableSwap);
+
+  function tokenRegistry() external view returns (ITokenRegistry);
+
+  function setTokenRegistry(address _tokenRegistry) external;
 
   function setupAsset(
-    ConnextMessage.TokenId calldata _canonical,
+    TokenId calldata _canonical,
     address _adoptedAssetId,
     address _stableSwapPool
   ) external;
 
-  function addStableSwapPool(ConnextMessage.TokenId calldata _canonical, address _stableSwapPool) external;
+  function addStableSwapPool(TokenId calldata _canonical, address _stableSwapPool) external;
 
-  function removeAssetId(bytes32 _canonicalId, address _adoptedAssetId) external;
+  function removeAssetId(bytes32 _key, address _adoptedAssetId) external;
+
+  function removeAssetId(TokenId calldata _canonical, address _adoptedAssetId) external;
 
   // BaseConnextFacet
-  function isRouterOwnershipRenounced() external view returns (bool);
-
-  function isAssetOwnershipRenounced() external view returns (bool);
-
-  function VERSION() external view returns (uint8);
 
   // BridgeFacet
   function relayerFees(bytes32 _transferId) external view returns (uint256);
@@ -53,7 +62,7 @@ interface IConnextHandler {
 
   function reconciledTransfers(bytes32 _transferId) external view returns (bool);
 
-  function tokenRegistry() external view returns (ITokenRegistry);
+  function connextion(uint32 _domain) external view returns (address);
 
   function domain() external view returns (uint256);
 
@@ -61,34 +70,23 @@ interface IConnextHandler {
 
   function nonce() external view returns (uint256);
 
-  function wrapper() external view returns (IWrapped);
-
   function sponsorVault() external view returns (ISponsorVault);
 
   function promiseRouter() external view returns (PromiseRouter);
-
-  function relayerFeeRouer() external view returns (RelayerFeeRouter);
-
-  function setTokenRegistry(address _tokenRegistry) external;
-
-  function setRelayerFeeRouter(address _relayerFeeRouter) external;
 
   function setPromiseRouter(address payable _promiseRouter) external;
 
   function setExecutor(address _executor) external;
 
-  function setWrapper(address _wrapper) external;
-
   function setSponsorVault(address _sponsorVault) external;
 
-  function xcall(XCallArgs calldata _args) external payable returns (bytes32);
+  function addConnextion(uint32 _domain, address _connext) external;
 
-  function handle(
-    uint32 _origin,
-    uint32 _nonce,
-    bytes32 _sender,
-    bytes memory _message
-  ) external;
+  function addSequencer(address _sequencer) external;
+
+  function removeSequencer(address _sequencer) external;
+
+  function xcall(XCallArgs calldata _args) external payable returns (bytes32);
 
   function execute(ExecuteArgs calldata _args) external returns (bytes32 transferId);
 
@@ -104,38 +102,44 @@ interface IConnextHandler {
   ) external payable;
 
   // NomadFacet
-  function xAppConnectionManager() external view returns (XAppConnectionManager);
+  function bridgeRouter() external view returns (IBridgeRouter);
 
-  function remotes(uint32 _domain) external view returns (bytes32);
+  function setBridgeRouter(address _bridge) external;
 
-  function setXAppConnectionManager(address _xAppConnectionManager) external;
-
-  function enrollRemoteRouter(uint32 _domain, bytes32 _router) external;
+  function onReceive(
+    uint32 _origin,
+    uint32 _tokenDomain,
+    bytes32 _tokenAddress,
+    address _localToken,
+    uint256 _amount,
+    bytes memory _extraData
+  ) external;
 
   // ProposedOwnableFacet
-  function routerOwnershipRenounced() external view returns (bool);
 
-  function assetOwnershipRenounced() external view returns (bool);
+  function owner() external view returns (address);
 
-  function proposedOwnableOwner() external view returns (address);
+  function routerWhitelistRemoved() external view returns (bool);
+
+  function assetWhitelistRemoved() external view returns (bool);
 
   function proposed() external view returns (address);
 
   function proposedTimestamp() external view returns (uint256);
 
-  function routerOwnershipTimestamp() external view returns (uint256);
+  function routerWhitelistTimestamp() external view returns (uint256);
 
-  function assetOwnershipTimestamp() external view returns (uint256);
+  function assetWhitelistTimestamp() external view returns (uint256);
 
   function delay() external view returns (uint256);
 
-  function proposeRouterOwnershipRenunciation() external;
+  function proposeRouterWhitelistRemoval() external;
 
-  function renounceRouterOwnership() external;
+  function removeRouterWhitelist() external;
 
-  function proposeAssetOwnershipRenunciation() external;
+  function proposeAssetWhitelistRemoval() external;
 
-  function renounceAssetOwnership() external;
+  function removeAssetWhitelist() external;
 
   function renounced() external view returns (bool);
 
@@ -155,6 +159,8 @@ interface IConnextHandler {
   function approvedRelayers(address _relayer) external view returns (bool);
 
   function relayerFeeRouter() external view returns (RelayerFeeRouter);
+
+  function setRelayerFeeRouter(address _relayerFeeRouter) external;
 
   function addRelayer(address _relayer) external;
 
@@ -185,15 +191,9 @@ interface IConnextHandler {
 
   function maxRoutersPerTransfer() external view returns (uint256);
 
-  function setLiquidityFeeNumerator(uint256 _numerator) external;
-
   function routerBalances(address _router, address _asset) external view returns (uint256);
 
-  function setRouterRecipient(address router, address recipient) external;
-
-  function proposeRouterOwner(address router, address proposed) external;
-
-  function acceptProposedRouterOwner(address router) external;
+  function getRouterApprovalForPortal(address _router) external view returns (bool);
 
   function setupRouter(
     address router,
@@ -204,6 +204,18 @@ interface IConnextHandler {
   function removeRouter(address router) external;
 
   function setMaxRoutersPerTransfer(uint256 _newMaxRouters) external;
+
+  function setLiquidityFeeNumerator(uint256 _numerator) external;
+
+  function approveRouterForPortal(address _router) external;
+
+  function unapproveRouterForPortal(address _router) external;
+
+  function setRouterRecipient(address router, address recipient) external;
+
+  function proposeRouterOwner(address router, address proposed) external;
+
+  function acceptProposedRouterOwner(address router) external;
 
   function addRouterLiquidityFor(
     uint256 _amount,
@@ -227,8 +239,6 @@ interface IConnextHandler {
   ) external;
 
   // PortalFacet
-  function getRouterApprovalForPortal(address _router) external view returns (bool);
-
   function getAavePortalDebt(bytes32 _transferId) external view returns (uint256);
 
   function getAavePortalFeeDebt(bytes32 _transferId) external view returns (uint256);
@@ -237,28 +247,29 @@ interface IConnextHandler {
 
   function aavePortalFee() external view returns (uint256);
 
-  function approveRouterForPortal(address _router) external;
-
-  function unapproveRouterForPortal(address _router) external;
-
   function setAavePool(address _aavePool) external;
 
   function setAavePortalFee(uint256 _aavePortalFeeNumerator) external;
 
   function repayAavePortal(
-    address _asset,
+    CallParams calldata _params,
+    address _local,
+    address _originSender,
+    uint256 _bridgedAmt,
+    uint256 _nonce,
     uint256 _backingAmount,
     uint256 _feeAmount,
-    uint256 _maxIn,
-    bytes32 _transferId
+    uint256 _maxIn
   ) external;
 
   function repayAavePortalFor(
-    address _router,
+    CallParams calldata _params,
     address _adopted,
+    address _originSender,
+    uint256 _bridgedAmt,
+    uint256 _nonce,
     uint256 _backingAmount,
-    uint256 _feeAmount,
-    bytes32 _transferId
+    uint256 _feeAmount
   ) external;
 
   // StableSwapFacet
@@ -357,6 +368,8 @@ interface IConnextHandler {
     uint256 deadline
   ) external returns (uint256);
 
+  // SwapAdminFacet
+
   function initializeSwap(
     bytes32 _canonicalId,
     IERC20[] memory _pooledTokens,
@@ -383,22 +396,7 @@ interface IConnextHandler {
 
   function stopRampA(bytes32 canonicalId) external;
 
-  // DiamondCutFacet
-  function diamondCut(
-    IDiamondCut.FacetCut[] calldata _diamondCut,
-    address _init,
-    bytes calldata _calldata
-  ) external;
+  // VersionFacet
 
-  function proposeDiamondCut(
-    IDiamondCut.FacetCut[] calldata _diamondCut,
-    address _init,
-    bytes calldata _calldata
-  ) external;
-
-  function rescindDiamondCut(
-    IDiamondCut.FacetCut[] calldata _diamondCut,
-    address _init,
-    bytes calldata _calldata
-  ) external;
+  function VERSION() external returns (uint8);
 }

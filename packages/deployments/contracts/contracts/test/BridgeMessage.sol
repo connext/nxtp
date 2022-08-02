@@ -1,9 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity 0.8.15;
 
-import {TypedMemView} from "../../../nomad-core/libs/TypedMemView.sol";
+// ============ External Imports ============
+import {TypedMemView} from "../nomad-core/libs/TypedMemView.sol";
 
-library ConnextMessage {
+library BridgeMessage {
   // ============ Libraries ============
 
   using TypedMemView for bytes;
@@ -18,7 +19,9 @@ library ConnextMessage {
     Invalid, // 0
     TokenId, // 1
     Message, // 2
-    Transfer // 3
+    Transfer, // 3
+    FastTransfer, // 4
+    ConnextTransfer // 5
   }
 
   // ============ Structs ============
@@ -35,8 +38,8 @@ library ConnextMessage {
 
   uint256 private constant TOKEN_ID_LEN = 36; // 4 bytes domain + 32 bytes id
   uint256 private constant IDENTIFIER_LEN = 1;
-  uint256 private constant TRANSFER_LEN = 129;
-  // 1 byte identifier + 32 bytes recipient + 32 bytes amount + 32 bytes detailsHash + 32 bytes external hash
+  uint256 private constant TRANSFER_LEN = 97; // 1 byte identifier + 32 bytes recipient + 32 bytes amount + 32 bytes detailsHash
+  uint256 private constant CONNEXT_TRANSFER_LEN = 97; // 1 byte identifier + 32 bytes externalId + 32 bytes amount + 32 bytes detailsHash
 
   // ============ Modifiers ============
 
@@ -50,7 +53,7 @@ library ConnextMessage {
     _;
   }
 
-  // ============ Internal Functions: Validation ============
+  // ============ Internal Functions ============
 
   /**
    * @notice Checks that Action is valid type
@@ -58,7 +61,47 @@ library ConnextMessage {
    * @return TRUE if action is valid
    */
   function isValidAction(bytes29 _action) internal pure returns (bool) {
-    return isTransfer(_action);
+    return isTransfer(_action) || isFastTransfer(_action) || isConnextTransfer(_action);
+  }
+
+  /**
+   * @notice Checks that view is a valid message length
+   * @param _view The bytes string
+   * @return TRUE if message is valid
+   */
+  // NOTE: this still works with CONNEXT_TRANSFER only because the `bytes32 recipient` is replaced with the `bytes32 externalId`
+  // should it be more explicit by adding an `||` condition on the _len?
+  function isValidMessageLength(bytes29 _view) internal pure returns (bool) {
+    uint256 _len = _view.len();
+    return _len == TOKEN_ID_LEN + TRANSFER_LEN;
+  }
+
+  /**
+   * @notice Formats an action message
+   * @param _tokenId The token ID
+   * @param _action The action
+   * @return The formatted message
+   */
+  function formatMessage(bytes29 _tokenId, bytes29 _action)
+    internal
+    view
+    typeAssert(_tokenId, Types.TokenId)
+    returns (bytes memory)
+  {
+    require(isValidAction(_action), "!action");
+    bytes29[] memory _views = new bytes29[](2);
+    _views[0] = _tokenId;
+    _views[1] = _action;
+    return TypedMemView.join(_views);
+  }
+
+  /**
+   * @notice Returns the type of the message
+   * @param _view The message
+   * @return The type of the message
+   */
+  function messageType(bytes29 _view) internal pure returns (Types) {
+    return Types(uint8(_view.typeOf()));
   }
 
   /**
@@ -81,61 +124,54 @@ library ConnextMessage {
   }
 
   /**
-   * @notice Checks that view is a valid message length
-   * @param _view The bytes string
-   * @return TRUE if message is valid
+   * @notice Checks that the message is of type FastTransfer
+   * @param _action The message
+   * @return True if the message is of type FastTransfer
    */
-  function isValidMessageLength(bytes29 _view) internal pure returns (bool) {
-    uint256 _len = _view.len();
-    return _len == TOKEN_ID_LEN + TRANSFER_LEN;
+  function isFastTransfer(bytes29 _action) internal pure returns (bool) {
+    return isType(_action, Types.FastTransfer);
   }
 
   /**
-   * @notice Asserts that the message is of type Message
-   * @param _view The message
-   * @return The message
+   * @notice Checks that the message is of type ConnextTransfer
+   * @param _action The message
+   * @return True if the message is of type ConnextTransfer
    */
-  function mustBeMessage(bytes29 _view) internal pure returns (bytes29) {
-    return tryAsMessage(_view).assertValid();
-  }
-
-  // ============ Internal Functions: Formatting ============
-
-  /**
-   * @notice Formats an action message
-   * @param _tokenId The token ID
-   * @param _action The action
-   * @return The formatted message
-   */
-  function formatMessage(bytes29 _tokenId, bytes29 _action)
-    internal
-    view
-    typeAssert(_tokenId, Types.TokenId)
-    returns (bytes memory)
-  {
-    require(isValidAction(_action), "!action");
-    bytes29[] memory _views = new bytes29[](2);
-    _views[0] = _tokenId;
-    _views[1] = _action;
-    return TypedMemView.join(_views);
+  function isConnextTransfer(bytes29 _action) internal pure returns (bool) {
+    return isType(_action, Types.ConnextTransfer);
   }
 
   /**
    * @notice Formats Transfer
    * @param _to The recipient address as bytes32
    * @param _amnt The transfer amount
-   * @param _detailsHash The token details hash
-   * @param _transferId Unique identifier for transfer
+   * @param _detailsHash The hash of the token name, symbol, and decimals
    * @return
    */
   function formatTransfer(
     bytes32 _to,
     uint256 _amnt,
-    bytes32 _detailsHash,
-    bytes32 _transferId
+    bytes32 _detailsHash
+  ) internal pure returns (bytes29) {
+    return abi.encodePacked(Types.Transfer, _to, _amnt, _detailsHash).ref(0).castTo(uint40(Types.Transfer));
+  }
+
+  /**
+   * @notice Formats Connext Transfer
+   * @param _externalId The external identifier of the transfer
+   * @param _amnt The transfer amount
+   * @param _detailsHash The hash of the token name, symbol, and decimals
+   * @return
+   */
+  function formatConnextTransfer(
+    bytes32 _externalId,
+    uint256 _amnt,
+    bytes32 _detailsHash
   ) internal pure returns (bytes29) {
     return
-      abi.encodePacked(Types.Transfer, _to, _amnt, _detailsHash, _transferId).ref(0).castTo(uint40(Types.Transfer));
+      abi.encodePacked(Types.ConnextTransfer, _externalId, _amnt, _detailsHash).ref(0).castTo(
+        uint40(Types.ConnextTransfer)
+      );
   }
 
   /**
@@ -170,7 +206,7 @@ library ConnextMessage {
    * @param _decimals The decimals
    * @return The Details message
    */
-  function formatDetailsHash(
+  function getDetailsHash(
     string memory _name,
     string memory _symbol,
     uint8 _decimals
@@ -179,49 +215,26 @@ library ConnextMessage {
   }
 
   /**
-   * @notice Converts to a Message
-   * @param _message The message
-   * @return The newly typed message
+   * @notice get the preFillId used to identify
+   * fast liquidity provision for incoming token send messages
+   * @dev used to identify a token/transfer pair in the prefill LP mapping.
+   * @param _origin The domain of the chain from which the transfer originated
+   * @param _nonce The unique identifier for the message from origin to destination
+   * @param _tokenId The token ID
+   * @param _action The action
    */
-  function tryAsMessage(bytes29 _message) internal pure returns (bytes29) {
-    if (isValidMessageLength(_message)) {
-      return _message.castTo(uint40(Types.Message));
-    }
-    return TypedMemView.nullView();
+  function getPreFillId(
+    uint32 _origin,
+    uint32 _nonce,
+    bytes29 _tokenId,
+    bytes29 _action
+  ) internal view returns (bytes32) {
+    bytes29[] memory _views = new bytes29[](3);
+    _views[0] = abi.encodePacked(_origin, _nonce).ref(0);
+    _views[1] = _tokenId;
+    _views[2] = _action;
+    return TypedMemView.joinKeccak(_views);
   }
-
-  // ============ Internal Functions: Parsing msg ============
-
-  /**
-   * @notice Returns the type of the message
-   * @param _view The message
-   * @return The type of the message
-   */
-  function messageType(bytes29 _view) internal pure returns (Types) {
-    return Types(uint8(_view.typeOf()));
-  }
-
-  /**
-   * @notice Retrieves the token ID from a Message
-   * @param _message The message
-   * @return The ID
-   */
-  function tokenId(bytes29 _message) internal pure typeAssert(_message, Types.Message) returns (bytes29) {
-    return _message.slice(0, TOKEN_ID_LEN, uint40(Types.TokenId));
-  }
-
-  /**
-   * @notice Retrieves the action data from a Message
-   * @param _message The message
-   * @return The action
-   */
-  function action(bytes29 _message) internal pure typeAssert(_message, Types.Message) returns (bytes29) {
-    uint256 _actionLen = _message.len() - TOKEN_ID_LEN;
-    uint40 _type = uint40(msgType(_message));
-    return _message.slice(TOKEN_ID_LEN, _actionLen, _type);
-  }
-
-  // ============ Internal Functions: Parsing tokenId ============
 
   /**
    * @notice Retrieves the domain from a TokenID
@@ -252,8 +265,6 @@ library ConnextMessage {
     return _tokenId.indexAddress(16);
   }
 
-  // ============ Internal Functions: Parsing action ============
-
   /**
    * @notice Retrieves the action identifier from message
    * @param _message The action
@@ -277,6 +288,8 @@ library ConnextMessage {
    * @param _transferAction The message
    * @return The recipient address as bytes32
    */
+  // NOTE: If used on a Types.ConnextTransfer then this will return the external id. Should there
+  // be strict type assertion here as well? (this should be valid for Transfer or FastTransfer types)
   function recipient(bytes29 _transferAction) internal pure returns (bytes32) {
     // before = 1 byte identifier
     return _transferAction.index(1, 32);
@@ -303,16 +316,6 @@ library ConnextMessage {
   }
 
   /**
-   * @notice Retrieves the unique identifier from a Transfer
-   * @param _transferAction The message
-   * @return The amount
-   */
-  function transferId(bytes29 _transferAction) internal pure returns (bytes32) {
-    // before = 1 byte identifier + 32 bytes ID + 32 bytes amount + 32 bytes detailsHash = 97 bytes
-    return _transferAction.index(97, 32);
-  }
-
-  /**
    * @notice Retrieves the detailsHash from a Transfer
    * @param _transferAction The message
    * @return The detailsHash
@@ -320,5 +323,62 @@ library ConnextMessage {
   function detailsHash(bytes29 _transferAction) internal pure returns (bytes32) {
     // before = 1 byte identifier + 32 bytes ID + 32 bytes amount = 65 bytes
     return _transferAction.index(65, 32);
+  }
+
+  /**
+   * @notice Retrieves the externalId from a Connext Transfer
+   * @dev MUST be used on the ConnextTransfer type, otherwise will revert
+   * @param _transferAction The message
+   * @return The external id
+   */
+  function externalId(bytes29 _transferAction)
+    internal
+    pure
+    typeAssert(_transferAction, Types.ConnextTransfer)
+    returns (bytes32)
+  {
+    // before = 1 byte identifier
+    return _transferAction.index(1, 32);
+  }
+
+  /**
+   * @notice Retrieves the token ID from a Message
+   * @param _message The message
+   * @return The ID
+   */
+  function tokenId(bytes29 _message) internal pure typeAssert(_message, Types.Message) returns (bytes29) {
+    return _message.slice(0, TOKEN_ID_LEN, uint40(Types.TokenId));
+  }
+
+  /**
+   * @notice Retrieves the action data from a Message
+   * @param _message The message
+   * @return The action
+   */
+  function action(bytes29 _message) internal pure typeAssert(_message, Types.Message) returns (bytes29) {
+    uint256 _actionLen = _message.len() - TOKEN_ID_LEN;
+    uint40 _type = uint40(msgType(_message));
+    return _message.slice(TOKEN_ID_LEN, _actionLen, _type);
+  }
+
+  /**
+   * @notice Converts to a Message
+   * @param _message The message
+   * @return The newly typed message
+   */
+  function tryAsMessage(bytes29 _message) internal pure returns (bytes29) {
+    if (isValidMessageLength(_message)) {
+      return _message.castTo(uint40(Types.Message));
+    }
+    return TypedMemView.nullView();
+  }
+
+  /**
+   * @notice Asserts that the message is of type Message
+   * @param _view The message
+   * @return The message
+   */
+  function mustBeMessage(bytes29 _view) internal pure returns (bytes29) {
+    return tryAsMessage(_view).assertValid();
   }
 }

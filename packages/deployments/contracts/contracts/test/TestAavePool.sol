@@ -11,27 +11,28 @@ contract TestAavePool is IAavePool {
   }
 
   function mintUnbacked(
-    address asset,
-    uint256 amount,
-    address onBehalfOf,
-    uint16 referralCode
-  ) external {
+    address, //asset,
+    uint256, //amount,
+    address, //onBehalfOf,
+    uint16 //referralCode
+  ) external view {
     require(!revertCall, "mintUnbacked reverted");
   }
 
   function backUnbacked(
-    address asset,
-    uint256 amount,
-    uint256 fee
-  ) external {
+    address, //asset,
+    uint256, // amount,
+    uint256 // fee
+  ) external view {
     require(!revertCall, "backUnbacked reverted");
   }
 
   function withdraw(
-    address asset,
+    address, // asset,
     uint256 amount,
-    address to
-  ) external returns (uint256) {
+    address //to
+  ) external view returns (uint256) {
     require(!revertCall, "withdraw reverted");
+    return amount;
   }
 }

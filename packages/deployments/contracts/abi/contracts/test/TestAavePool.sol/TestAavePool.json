@@ -1,6 +1,6 @@
 [
-  "function backUnbacked(address,uint256,uint256)",
-  "function mintUnbacked(address,uint256,address,uint16)",
+  "function backUnbacked(address,uint256,uint256) view",
+  "function mintUnbacked(address,uint256,address,uint16) view",
   "function setRevertCall(bool)",
-  "function withdraw(address,uint256,address) returns (uint256)"
+  "function withdraw(address,uint256,address) view returns (uint256)"
 ]

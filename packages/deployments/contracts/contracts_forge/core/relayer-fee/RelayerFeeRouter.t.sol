@@ -33,7 +33,6 @@ contract RelayerFeeRouterTest is ForgeHelper {
   uint256 domain = 1;
   address bridgeRouter = address(1);
   address tokenRegistry = address(2);
-  address wrapper = address(3);
 
   address internal xAppConnectionManager = address(1);
   address internal home;

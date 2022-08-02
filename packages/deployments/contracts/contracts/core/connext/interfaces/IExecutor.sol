@@ -42,5 +42,5 @@ interface IExecutor {
 
   function amount() external returns (uint256);
 
-  function execute(ExecutorArgs calldata _args) external payable returns (bool success, bytes memory returnData);
+  function execute(ExecutorArgs calldata _args) external returns (bool success, bytes memory returnData);
 }

@@ -1,20 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.15;
 
-import {IBridgeToken} from "../../contracts/core/connext/interfaces/IBridgeToken.sol";
 import {ITokenRegistry} from "../../contracts/core/connext/interfaces/ITokenRegistry.sol";
 import {IStableSwap} from "../../contracts/core/connext/interfaces/IStableSwap.sol";
-import {IWrapped} from "../../contracts/core/connext/interfaces/IWrapped.sol";
+import {IWeth} from "../../contracts/core/connext/interfaces/IWeth.sol";
 
-import {ConnextMessage} from "../../contracts/core/connext/libraries/ConnextMessage.sol";
-import {LibConnextStorage, AppStorage} from "../../contracts/core/connext/libraries/LibConnextStorage.sol";
-import {TestERC20} from "../../contracts/test/TestERC20.sol";
-import {ConnextMessage} from "../../contracts/core/connext/libraries/ConnextMessage.sol";
+import {LibConnextStorage, AppStorage, TokenId} from "../../contracts/core/connext/libraries/LibConnextStorage.sol";
 import {IStableSwap} from "../../contracts/core/connext/interfaces/IStableSwap.sol";
 
 import {TestERC20} from "../../contracts/test/TestERC20.sol";
 
-import {MockWrapper} from "./Mock.sol";
 import "./ForgeHelper.sol";
 
 contract FacetHelper is ForgeHelper {
@@ -31,13 +26,12 @@ contract FacetHelper is ForgeHelper {
   address _canonical;
   bytes32 _canonicalId;
   uint32 _canonicalDomain = _originDomain;
+  bytes32 _canonicalKey;
 
   // adopted asset for this domain
   address _adopted;
   // local asset for this domain
   address _local;
-  // native asset wrapper
-  address _wrapper;
 
   // token registry
   address _tokenRegistry = address(6);
@@ -57,19 +51,11 @@ contract FacetHelper is ForgeHelper {
   function utils_setFees() public {
     AppStorage storage s = LibConnextStorage.connextStorage();
     s.LIQUIDITY_FEE_NUMERATOR = _liquidityFeeNumerator;
-    s.LIQUIDITY_FEE_DENOMINATOR = _liquidityFeeDenominator;
     s.aavePortalFeeNumerator = _portalFeeNumerator;
   }
 
-  // Sets remote router context
-  function utils_setRemote(bool onOrigin) public {
-    AppStorage storage s = LibConnextStorage.connextStorage();
-    s.domain = onOrigin ? _originDomain : _destinationDomain;
-    s.remotes[onOrigin ? _destinationDomain : _originDomain] = _remote;
-  }
-
-  // Deploys the wrapper, local, adopted, and canonical tokens. Also sets the
-  // canonical id, token registry, wrapper
+  // Deploys the local, adopted, and canonical tokens. Also sets the
+  // canonical id, token registry
   function utils_deployAssetContracts() public {
     AppStorage storage s = LibConnextStorage.connextStorage();
     // Deploy the adopted token.
@@ -79,12 +65,7 @@ contract FacetHelper is ForgeHelper {
     // Deploy the canonical token.
     _canonical = address(new TestERC20("Test Token", "TEST"));
     _canonicalId = bytes32(abi.encodePacked(_canonical));
-    // Deploy wrapper for native asset.
-    s.wrapper = IWrapped(new MockWrapper());
-    _wrapper = address(s.wrapper);
-    vm.mockCall(_wrapper, abi.encodeWithSelector(IBridgeToken.name.selector), abi.encode("TestERC20"));
-    vm.mockCall(_wrapper, abi.encodeWithSelector(IBridgeToken.symbol.selector), abi.encode("TEST"));
-    vm.mockCall(_wrapper, abi.encodeWithSelector(IBridgeToken.decimals.selector), abi.encode(18));
+    _canonicalKey = keccak256(abi.encode(_canonicalId, _canonicalDomain));
     // Set token registry
     s.tokenRegistry = ITokenRegistry(_tokenRegistry);
   }
@@ -137,9 +118,10 @@ contract FacetHelper is ForgeHelper {
     vm.mockCall(_tokenRegistry, abi.encodeWithSelector(ITokenRegistry.getLocalAddress.selector), abi.encode(_local));
 
     // Setup the storage variables
-    s.adoptedToCanonical[_adopted] = ConnextMessage.TokenId(_canonicalDomain, _canonicalId);
-    s.adoptedToLocalPools[_canonicalId] = IStableSwap(_stableSwap);
-    s.canonicalToAdopted[_canonicalId] = _adopted;
+    _canonicalKey = keccak256(abi.encode(_canonicalId, _canonicalDomain));
+    s.adoptedToCanonical[_adopted] = TokenId(_canonicalDomain, _canonicalId);
+    s.adoptedToLocalPools[_canonicalKey] = IStableSwap(_stableSwap);
+    s.canonicalToAdopted[_canonicalKey] = _adopted;
 
     // // Log stored vars
     // console.log("setup asset:");
@@ -147,34 +129,6 @@ contract FacetHelper is ForgeHelper {
     // console.log("- local:", _local);
     // console.log("- canonical:", _canonical);
     // console.log("- stableSwap:", _stableSwap);
-    // console.log("- wrapper:", address(s.wrapper));
     // console.log("- isLocalOrigin", onCanonical);
-  }
-
-  function utils_setupNative(bool localIsAdopted, bool onCanonical) public {
-    AppStorage storage s = LibConnextStorage.connextStorage();
-    // When you are using the native asset:
-    // - canonical asset will always be the wrapper
-    // - adopted asset will always be the wrapper
-    // - the local asset may or may not be the wrapper
-    if (onCanonical) {
-      // The wrapper is canonical when on the canonical domain
-      // only
-      _canonical = address(s.wrapper);
-      _canonicalId = bytes32(abi.encodePacked(_canonical));
-    } else {
-      // If localIsAdopted, then the local asset is the wrapper
-      if (localIsAdopted) {
-        // this is like if madETH is adopted on cronos. in this case,
-        // the wrapper must also have the `detailsHash()` functionality
-        // this is handled in the other utility function (see `utils_formatMessage`)
-        _local = address(new TestERC20("Test Token", "TEST"));
-        _adopted = _local;
-      } else {
-        // The adopted asset is the wrapper, local is bridge token
-        _adopted = address(s.wrapper);
-      }
-    }
-    utils_setupAsset(localIsAdopted, onCanonical);
   }
 }

@@ -4,7 +4,7 @@
   "function FAILURE_GAS() view returns (uint256)",
   "function MAX_COPY() view returns (uint16)",
   "function amount() view returns (uint256)",
-  "function execute(tuple(bytes32,uint256,address,address,address,bytes,bytes)) payable returns (bool, bytes)",
+  "function execute(tuple(bytes32,uint256,address,address,address,bytes,bytes)) returns (bool, bytes)",
   "function getConnext() view returns (address)",
   "function origin() view returns (uint32)",
   "function originSender() view returns (address)"

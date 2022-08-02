@@ -1,4 +1,8 @@
 [
   "event DiamondCut(tuple(address,uint8,bytes4[])[],address,bytes)",
-  "function diamondCut(tuple(address,uint8,bytes4[])[],address,bytes)"
+  "event DiamondCutProposed(tuple(address,uint8,bytes4[])[],address,bytes,uint256)",
+  "event DiamondCutRescinded(tuple(address,uint8,bytes4[])[],address,bytes)",
+  "function diamondCut(tuple(address,uint8,bytes4[])[],address,bytes)",
+  "function proposeDiamondCut(tuple(address,uint8,bytes4[])[],address,bytes)",
+  "function rescindDiamondCut(tuple(address,uint8,bytes4[])[],address,bytes)"
 ]

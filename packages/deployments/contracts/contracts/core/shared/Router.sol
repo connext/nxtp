@@ -54,7 +54,7 @@ abstract contract Router is XAppConnectionClient, IMessageRecipient {
    * @param _router The address of the potential remote xApp Router
    */
   function _isRemoteRouter(uint32 _domain, bytes32 _router) internal view returns (bool) {
-    return remotes[_domain] == _router;
+    return remotes[_domain] == _router && _router != bytes32(0);
   }
 
   /**

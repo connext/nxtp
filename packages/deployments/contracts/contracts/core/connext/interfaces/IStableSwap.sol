@@ -37,18 +37,28 @@ interface IStableSwap {
   event RampA(uint256 oldA, uint256 newA, uint256 initialTime, uint256 futureTime);
   event StopRampA(uint256 currentA, uint256 time);
 
+  function swap(
+    uint8 tokenIndexFrom,
+    uint8 tokenIndexTo,
+    uint256 dx,
+    uint256 minDy,
+    uint256 deadline
+  ) external returns (uint256);
+
   function swapExact(
     uint256 amountIn,
     address assetIn,
     address assetOut,
-    uint256 minAmountOut
+    uint256 minAmountOut,
+    uint256 deadline
   ) external payable returns (uint256);
 
   function swapExactOut(
     uint256 amountOut,
     address assetIn,
     address assetOut,
-    uint256 maxAmountIn
+    uint256 maxAmountIn,
+    uint256 deadline
   ) external payable returns (uint256);
 
   function getA() external view returns (uint256);
@@ -106,14 +116,6 @@ interface IStableSwap {
     uint256 adminFee,
     address lpTokenTargetAddress
   ) external;
-
-  function swap(
-    uint8 tokenIndexFrom,
-    uint8 tokenIndexTo,
-    uint256 dx,
-    uint256 minDy,
-    uint256 deadline
-  ) external returns (uint256);
 
   function addLiquidity(
     uint256[] calldata amounts,

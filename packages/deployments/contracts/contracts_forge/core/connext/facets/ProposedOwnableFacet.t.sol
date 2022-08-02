@@ -19,58 +19,58 @@ contract ProposedOwnableFacetTest is ProposedOwnableFacet, FacetHelper {
 
   // ============ Utils ============
   function utils_proposeRenounceRouterAndAssert() public {
-    assertEq(this.routerOwnershipTimestamp(), 0);
+    assertEq(this.routerWhitelistTimestamp(), 0);
 
     vm.expectEmit(true, true, true, true);
-    emit RouterOwnershipRenunciationProposed(block.timestamp);
+    emit RouterWhitelistRemovalProposed(block.timestamp);
 
     vm.prank(this.owner());
-    this.proposeRouterOwnershipRenunciation();
+    this.proposeRouterWhitelistRemoval();
 
-    assertEq(this.routerOwnershipTimestamp(), block.timestamp);
-    assertTrue(!this.routerOwnershipRenounced());
+    assertEq(this.routerWhitelistTimestamp(), block.timestamp);
+    assertTrue(!this.routerWhitelistRemoved());
     assertTrue(!this.renounced());
   }
 
   function utils_renounceRouterAndAssert() public {
-    assertTrue(this.routerOwnershipTimestamp() != 0);
+    assertTrue(this.routerWhitelistTimestamp() != 0);
 
     vm.expectEmit(true, true, true, true);
-    emit RouterOwnershipRenounced(true);
+    emit RouterWhitelistRemoved(true);
 
     vm.prank(this.owner());
-    this.renounceRouterOwnership();
+    this.removeRouterWhitelist();
 
-    assertEq(this.routerOwnershipTimestamp(), 0);
-    assertTrue(this.routerOwnershipRenounced());
+    assertEq(this.routerWhitelistTimestamp(), 0);
+    assertTrue(this.routerWhitelistRemoved());
     assertTrue(!this.renounced());
   }
 
   function utils_proposeRenounceAssetAndAssert() public {
-    assertEq(this.assetOwnershipTimestamp(), 0);
+    assertEq(this.assetWhitelistTimestamp(), 0);
 
     vm.expectEmit(true, true, true, true);
-    emit AssetOwnershipRenunciationProposed(block.timestamp);
+    emit AssetWhitelistRemovalProposed(block.timestamp);
 
     vm.prank(this.owner());
-    this.proposeAssetOwnershipRenunciation();
+    this.proposeAssetWhitelistRemoval();
 
-    assertEq(this.assetOwnershipTimestamp(), block.timestamp);
-    assertTrue(!this.assetOwnershipRenounced());
+    assertEq(this.assetWhitelistTimestamp(), block.timestamp);
+    assertTrue(!this.assetWhitelistRemoved());
     assertTrue(!this.renounced());
   }
 
   function utils_renounceAssetAndAssert() public {
-    assertTrue(this.assetOwnershipTimestamp() != 0);
+    assertTrue(this.assetWhitelistTimestamp() != 0);
 
     vm.expectEmit(true, true, true, true);
-    emit AssetOwnershipRenounced(true);
+    emit AssetWhitelistRemoved(true);
 
     vm.prank(this.owner());
-    this.renounceAssetOwnership();
+    this.removeAssetWhitelist();
 
-    assertEq(this.assetOwnershipTimestamp(), 0);
-    assertTrue(this.assetOwnershipRenounced());
+    assertEq(this.assetWhitelistTimestamp(), 0);
+    assertTrue(this.assetWhitelistRemoved());
     assertTrue(!this.renounced());
   }
 
@@ -133,10 +133,10 @@ contract ProposedOwnableFacetTest is ProposedOwnableFacet, FacetHelper {
   // ============ owner ============
   // tested in assertion functions
 
-  // ============ routerOwnershipRenounced ============
+  // ============ routerWhitelistRemoved ============
   // tested in assertion functions
 
-  // ============ assetOwnershipRenounced ============
+  // ============ assetWhitelistRemoved ============
   // tested in assertion functions
 
   // ============ proposed ============
@@ -145,10 +145,10 @@ contract ProposedOwnableFacetTest is ProposedOwnableFacet, FacetHelper {
   // ============ proposedTimestamp ============
   // tested in assertion functions
 
-  // ============ routerOwnershipTimestamp ============
+  // ============ routerWhitelistTimestamp ============
   // tested in assertion functions
 
-  // ============ assetOwnershipTimestamp ============
+  // ============ assetWhitelistTimestamp ============
   // tested in assertion functions
 
   // ============ delay ============
@@ -156,113 +156,113 @@ contract ProposedOwnableFacetTest is ProposedOwnableFacet, FacetHelper {
     assertEq(this.delay(), 7 days);
   }
 
-  // ============ proposeRouterOwnershipRenunciation ============
-  function test_ProposedOwnableFacet__proposeRouterOwnershipRenunciation_failsIfNotOwner() public {
+  // ============ proposeRouterWhitelistRemoval ============
+  function test_ProposedOwnableFacet__proposeRouterWhitelistRemoval_failsIfNotOwner() public {
     vm.expectRevert(BaseConnextFacet__onlyOwner_notOwner.selector);
-    this.proposeRouterOwnershipRenunciation();
+    this.proposeRouterWhitelistRemoval();
   }
 
-  function test_ProposedOwnableFacet__proposeRouterOwnershipRenunciation_failsIfAlreadyRenounced() public {
+  function test_ProposedOwnableFacet__proposeRouterWhitelistRemoval_failsIfAlreadyRenounced() public {
     utils_proposeRenounceRouterAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceRouterAndAssert();
 
-    vm.expectRevert(ProposedOwnableFacet__proposeRouterOwnershipRenunciation_noOwnershipChange.selector);
+    vm.expectRevert(ProposedOwnableFacet__proposeRouterWhitelistRemoval_noOwnershipChange.selector);
     vm.prank(_owner);
-    this.proposeRouterOwnershipRenunciation();
+    this.proposeRouterWhitelistRemoval();
   }
 
-  function test_ProposedOwnableFacet__proposeRouterOwnershipRenunciation_works() public {
+  function test_ProposedOwnableFacet__proposeRouterWhitelistRemoval_works() public {
     utils_proposeRenounceRouterAndAssert();
   }
 
-  // ============ renounceRouterOwnership ============
-  function test_ProposedOwnableFacet__renounceRouterOwnership_failsIfNotOwner() public {
+  // ============ removeRouterWhitelist ============
+  function test_ProposedOwnableFacet__removeRouterWhitelist_failsIfNotOwner() public {
     utils_proposeRenounceRouterAndAssert();
     vm.expectRevert(BaseConnextFacet__onlyOwner_notOwner.selector);
-    this.renounceRouterOwnership();
+    this.removeRouterWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceRouterOwnership_failsIfAlreadyRenounced() public {
+  function test_ProposedOwnableFacet__removeRouterWhitelist_failsIfAlreadyRenounced() public {
     utils_proposeRenounceRouterAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceRouterAndAssert();
 
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceRouterOwnership_noOwnershipChange.selector);
-    this.renounceRouterOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeRouterWhitelist_noOwnershipChange.selector);
+    this.removeRouterWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceRouterOwnership_failsIfNotProposed() public {
+  function test_ProposedOwnableFacet__removeRouterWhitelist_failsIfNotProposed() public {
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceRouterOwnership_noProposal.selector);
-    this.renounceRouterOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeRouterWhitelist_noProposal.selector);
+    this.removeRouterWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceRouterOwnership_failsIfDelayNotElapsed() public {
+  function test_ProposedOwnableFacet__removeRouterWhitelist_failsIfDelayNotElapsed() public {
     utils_proposeRenounceRouterAndAssert();
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceRouterOwnership_delayNotElapsed.selector);
-    this.renounceRouterOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeRouterWhitelist_delayNotElapsed.selector);
+    this.removeRouterWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceRouterOwnership_works() public {
+  function test_ProposedOwnableFacet__removeRouterWhitelist_works() public {
     utils_proposeRenounceRouterAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceRouterAndAssert();
   }
 
-  // ============ proposeAssetOwnershipRenunciation ============
-  function test_ProposedOwnableFacet__proposeAssetOwnershipRenunciation_failsIfNotOwner() public {
+  // ============ proposeAssetWhitelistRemoval ============
+  function test_ProposedOwnableFacet__proposeAssetWhitelistRemoval_failsIfNotOwner() public {
     vm.expectRevert(BaseConnextFacet__onlyOwner_notOwner.selector);
-    this.proposeAssetOwnershipRenunciation();
+    this.proposeAssetWhitelistRemoval();
   }
 
-  function test_ProposedOwnableFacet__proposeAssetOwnershipRenunciation_failsIfAlreadyRenounced() public {
+  function test_ProposedOwnableFacet__proposeAssetWhitelistRemoval_failsIfAlreadyRenounced() public {
     utils_proposeRenounceAssetAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceAssetAndAssert();
 
-    vm.expectRevert(ProposedOwnableFacet__proposeAssetOwnershipRenunciation_noOwnershipChange.selector);
+    vm.expectRevert(ProposedOwnableFacet__proposeAssetWhitelistRemoval_noOwnershipChange.selector);
     vm.prank(_owner);
-    this.proposeAssetOwnershipRenunciation();
+    this.proposeAssetWhitelistRemoval();
   }
 
-  function test_ProposedOwnableFacet__proposeAssetOwnershipRenunciation_works() public {
+  function test_ProposedOwnableFacet__proposeAssetWhitelistRemoval_works() public {
     utils_proposeRenounceAssetAndAssert();
   }
 
-  // ============ renounceAssetOwnership ============
-  function test_ProposedOwnableFacet__renounceAssetOwnership_failsIfNotOwner() public {
+  // ============ removeAssetWhitelist ============
+  function test_ProposedOwnableFacet__removeAssetWhitelist_failsIfNotOwner() public {
     utils_proposeRenounceAssetAndAssert();
     vm.expectRevert(BaseConnextFacet__onlyOwner_notOwner.selector);
-    this.renounceAssetOwnership();
+    this.removeAssetWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceAssetOwnership_failsIfAlreadyRenounced() public {
+  function test_ProposedOwnableFacet__removeAssetWhitelist_failsIfAlreadyRenounced() public {
     utils_proposeRenounceAssetAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceAssetAndAssert();
 
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceAssetOwnership_noOwnershipChange.selector);
-    this.renounceAssetOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeAssetWhitelist_noOwnershipChange.selector);
+    this.removeAssetWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceAssetOwnership_failsIfNotProposed() public {
+  function test_ProposedOwnableFacet__removeAssetWhitelist_failsIfNotProposed() public {
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceAssetOwnership_noProposal.selector);
-    this.renounceAssetOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeAssetWhitelist_noProposal.selector);
+    this.removeAssetWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceAssetOwnership_failsIfDelayNotElapsed() public {
+  function test_ProposedOwnableFacet__removeAssetWhitelist_failsIfDelayNotElapsed() public {
     utils_proposeRenounceAssetAndAssert();
     vm.prank(this.owner());
-    vm.expectRevert(ProposedOwnableFacet__renounceAssetOwnership_delayNotElapsed.selector);
-    this.renounceAssetOwnership();
+    vm.expectRevert(ProposedOwnableFacet__removeAssetWhitelist_delayNotElapsed.selector);
+    this.removeAssetWhitelist();
   }
 
-  function test_ProposedOwnableFacet__renounceAssetOwnership_works() public {
+  function test_ProposedOwnableFacet__removeAssetWhitelist_works() public {
     utils_proposeRenounceAssetAndAssert();
     vm.warp(block.timestamp + this.delay() + 1);
     utils_renounceAssetAndAssert();

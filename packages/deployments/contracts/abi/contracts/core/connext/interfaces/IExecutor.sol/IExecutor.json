@@ -1,7 +1,7 @@
 [
   "event Executed(bytes32 indexed,address indexed,address indexed,address,uint256,bytes,bytes,bytes,bool)",
   "function amount() returns (uint256)",
-  "function execute(tuple(bytes32,uint256,address,address,address,bytes,bytes)) payable returns (bool, bytes)",
+  "function execute(tuple(bytes32,uint256,address,address,address,bytes,bytes)) returns (bool, bytes)",
   "function getConnext() returns (address)",
   "function origin() returns (uint32)",
   "function originSender() returns (address)"

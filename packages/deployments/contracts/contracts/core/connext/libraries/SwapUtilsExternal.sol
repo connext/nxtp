@@ -4,41 +4,31 @@ pragma solidity 0.8.15;
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {LPToken} from "../helpers/LPToken.sol";
-import {AmplificationUtils} from "./AmplificationUtils.sol";
 import {MathUtils} from "./MathUtils.sol";
 
 /**
- * @title SwapUtils library
+ * @title SwapUtilsExternal library
  * @notice A library to be used within Swap.sol. Contains functions responsible for custody and AMM functionalities.
  * @dev Contracts relying on this library must initialize SwapUtils.Swap struct then use this library
  * for SwapUtils.Swap struct. Note that this library contains both functions called by users and admins.
  * Admin functions should be protected within contracts using this library.
  */
-library SwapUtils {
+library SwapUtilsExternal {
   using SafeERC20 for IERC20;
   using MathUtils for uint256;
 
   /*** EVENTS ***/
 
-  event TokenSwap(
-    bytes32 indexed key,
-    address indexed buyer,
-    uint256 tokensSold,
-    uint256 tokensBought,
-    uint128 soldId,
-    uint128 boughtId
-  );
+  event TokenSwap(address indexed buyer, uint256 tokensSold, uint256 tokensBought, uint128 soldId, uint128 boughtId);
   event AddLiquidity(
-    bytes32 indexed key,
     address indexed provider,
     uint256[] tokenAmounts,
     uint256[] fees,
     uint256 invariant,
     uint256 lpTokenSupply
   );
-  event RemoveLiquidity(bytes32 indexed key, address indexed provider, uint256[] tokenAmounts, uint256 lpTokenSupply);
+  event RemoveLiquidity(address indexed provider, uint256[] tokenAmounts, uint256 lpTokenSupply);
   event RemoveLiquidityOne(
-    bytes32 indexed key,
     address indexed provider,
     uint256 lpTokenAmount,
     uint256 lpTokenSupply,
@@ -46,21 +36,22 @@ library SwapUtils {
     uint256 tokensBought
   );
   event RemoveLiquidityImbalance(
-    bytes32 indexed key,
     address indexed provider,
     uint256[] tokenAmounts,
     uint256[] fees,
     uint256 invariant,
     uint256 lpTokenSupply
   );
-  event NewAdminFee(bytes32 indexed key, uint256 newAdminFee);
-  event NewSwapFee(bytes32 indexed key, uint256 newSwapFee);
+  event NewAdminFee(uint256 newAdminFee);
+  event NewSwapFee(uint256 newSwapFee);
+
+  event RampA(uint256 oldA, uint256 newA, uint256 initialTime, uint256 futureTime);
+  event StopRampA(uint256 currentA, uint256 time);
 
   struct Swap {
     // variables around the ramp management of A,
     // the amplification coefficient * n * (n - 1)
     // see https://www.curve.fi/stableswap-paper.pdf for details
-    bytes32 key;
     uint256 initialA;
     uint256 futureA;
     uint256 initialATime;
@@ -124,10 +115,56 @@ library SwapUtils {
   // Constant value used as max loop limit
   uint256 internal constant MAX_LOOP_LIMIT = 256;
 
-  /*** VIEW & PURE FUNCTIONS ***/
+  // Constant values used in ramping A calculations
+  uint256 public constant A_PRECISION = 100;
+  uint256 public constant MAX_A = 10**6;
+  uint256 private constant MAX_A_CHANGE = 2;
+  uint256 private constant MIN_RAMP_TIME = 14 days;
 
-  function _getAPrecise(Swap storage self) private view returns (uint256) {
-    return AmplificationUtils._getAPrecise(self);
+  /*** VIEW & PURE FUNCTIONS ***/
+  /**
+   * @notice Return A, the amplification coefficient * n * (n - 1)
+   * @dev See the StableSwap paper for details
+   * @param self Swap struct to read from
+   * @return A parameter
+   */
+  function getA(Swap storage self) external view returns (uint256) {
+    return _getAPrecise(self) / A_PRECISION;
+  }
+
+  /**
+   * @notice Return A in its raw precision
+   * @dev See the StableSwap paper for details
+   * @param self Swap struct to read from
+   * @return A parameter in its raw precision form
+   */
+  function getAPrecise(Swap storage self) external view returns (uint256) {
+    return _getAPrecise(self);
+  }
+
+  /**
+   * @notice Return A in its raw precision
+   * @dev See the StableSwap paper for details
+   * @param self Swap struct to read from
+   * @return A parameter in its raw precision form
+   */
+  function _getAPrecise(Swap storage self) internal view returns (uint256) {
+    uint256 t1 = self.futureATime; // time when ramp is finished
+    uint256 a1 = self.futureA; // final A value when ramp is finished
+
+    if (block.timestamp < t1) {
+      uint256 t0 = self.initialATime; // time when ramp is started
+      uint256 a0 = self.initialA; // initial A value when ramp is started
+      if (a1 > a0) {
+        // a0 + (a1 - a0) * (block.timestamp - t0) / (t1 - t0)
+        return a0 + ((a1 - a0) * (block.timestamp - t0)) / (t1 - t0);
+      } else {
+        // a0 - (a0 - a1) * (block.timestamp - t0) / (t1 - t0)
+        return a0 - ((a0 - a1) * (block.timestamp - t0)) / (t1 - t0);
+      }
+    } else {
+      return a1;
+    }
   }
 
   /**
@@ -142,7 +179,7 @@ library SwapUtils {
     Swap storage self,
     uint256 tokenAmount,
     uint8 tokenIndex
-  ) internal view returns (uint256) {
+  ) external view returns (uint256) {
     (uint256 availableTokenAmount, ) = _calculateWithdrawOneToken(
       self,
       tokenAmount,
@@ -185,7 +222,7 @@ library SwapUtils {
     uint256 tokenAmount,
     uint256 totalSupply
   )
-    internal
+    public
     view
     returns (
       uint256,
@@ -256,7 +293,7 @@ library SwapUtils {
     uint8 tokenIndex,
     uint256[] memory xp,
     uint256 d
-  ) internal pure returns (uint256) {
+  ) public pure returns (uint256) {
     uint256 numTokens = xp.length;
     require(tokenIndex < numTokens, "Token not found");
 
@@ -277,9 +314,9 @@ library SwapUtils {
         ++i;
       }
     }
-    c = (c * d * AmplificationUtils.A_PRECISION) / (nA * numTokens);
+    c = (c * d * A_PRECISION) / (nA * numTokens);
 
-    uint256 b = s + ((d * AmplificationUtils.A_PRECISION) / nA);
+    uint256 b = s + ((d * A_PRECISION) / nA);
     uint256 yPrev;
     uint256 y = d;
     for (uint256 i; i < MAX_LOOP_LIMIT; ) {
@@ -304,7 +341,7 @@ library SwapUtils {
    * See the StableSwap paper for details
    * @return the invariant, at the precision of the pool
    */
-  function getD(uint256[] memory xp, uint256 a) internal pure returns (uint256) {
+  function getD(uint256[] memory xp, uint256 a) public pure returns (uint256) {
     uint256 numTokens = xp.length;
     uint256 s;
     for (uint256 i; i < numTokens; ) {
@@ -336,8 +373,8 @@ library SwapUtils {
       }
       prevD = d;
       d =
-        (((nA * s) / AmplificationUtils.A_PRECISION + dP * numTokens) * d) /
-        ((((nA - AmplificationUtils.A_PRECISION) * d) / AmplificationUtils.A_PRECISION + (numTokens + 1) * dP));
+        (((nA * s) / A_PRECISION + dP * numTokens) * d) /
+        ((((nA - A_PRECISION) * d) / A_PRECISION + (numTokens + 1) * dP));
       if (d.within1(prevD)) {
         return d;
       }
@@ -399,7 +436,7 @@ library SwapUtils {
    * @param self Swap struct to read from
    * @return the virtual price, scaled to precision of POOL_PRECISION_DECIMALS
    */
-  function getVirtualPrice(Swap storage self) internal view returns (uint256) {
+  function getVirtualPrice(Swap storage self) external view returns (uint256) {
     uint256 d = getD(_xp(self), _getAPrecise(self));
     LPToken lpToken = self.lpToken;
     uint256 supply = lpToken.totalSupply();
@@ -428,7 +465,7 @@ library SwapUtils {
     uint8 tokenIndexTo,
     uint256 x,
     uint256[] memory xp
-  ) internal pure returns (uint256) {
+  ) public pure returns (uint256) {
     uint256 numTokens = xp.length;
     require(tokenIndexFrom != tokenIndexTo, "compare token to itself");
     require(tokenIndexFrom < numTokens && tokenIndexTo < numTokens, "token not found");
@@ -460,8 +497,8 @@ library SwapUtils {
         ++i;
       }
     }
-    c = (c * d * AmplificationUtils.A_PRECISION) / (nA * numTokens);
-    uint256 b = s + ((d * AmplificationUtils.A_PRECISION) / nA);
+    c = (c * d * A_PRECISION) / (nA * numTokens);
+    uint256 b = s + ((d * A_PRECISION) / nA);
     uint256 yPrev;
     uint256 y = d;
 
@@ -494,7 +531,7 @@ library SwapUtils {
     uint8 tokenIndexFrom,
     uint8 tokenIndexTo,
     uint256 dx
-  ) internal view returns (uint256 dy) {
+  ) external view returns (uint256 dy) {
     (dy, ) = _calculateSwap(self, tokenIndexFrom, tokenIndexTo, dx, self.balances);
   }
 
@@ -511,7 +548,7 @@ library SwapUtils {
     uint8 tokenIndexFrom,
     uint8 tokenIndexTo,
     uint256 dy
-  ) internal view returns (uint256 dx) {
+  ) external view returns (uint256 dx) {
     (dx, ) = _calculateSwapInv(self, tokenIndexFrom, tokenIndexTo, dy, self.balances);
   }
 
@@ -591,7 +628,7 @@ library SwapUtils {
    * withdrawal
    * @return array of amounts of tokens user will receive
    */
-  function calculateRemoveLiquidity(Swap storage self, uint256 amount) internal view returns (uint256[] memory) {
+  function calculateRemoveLiquidity(Swap storage self, uint256 amount) external view returns (uint256[] memory) {
     return _calculateRemoveLiquidity(self.balances, amount, self.lpToken.totalSupply());
   }
 
@@ -636,7 +673,7 @@ library SwapUtils {
     Swap storage self,
     uint256[] calldata amounts,
     bool deposit
-  ) internal view returns (uint256) {
+  ) external view returns (uint256) {
     uint256 a = _getAPrecise(self);
     uint256[] memory balances = self.balances;
     uint256[] memory multipliers = self.tokenPrecisionMultipliers;
@@ -670,7 +707,7 @@ library SwapUtils {
    * @param index Index of the pooled token
    * @return admin balance in the token's precision
    */
-  function getAdminBalance(Swap storage self, uint256 index) internal view returns (uint256) {
+  function getAdminBalance(Swap storage self, uint256 index) external view returns (uint256) {
     require(index < self.pooledTokens.length, "index out of range");
     return self.adminFees[index];
   }
@@ -702,7 +739,7 @@ library SwapUtils {
     uint8 tokenIndexTo,
     uint256 dx,
     uint256 minDy
-  ) internal returns (uint256) {
+  ) external returns (uint256) {
     {
       IERC20 tokenFrom = self.pooledTokens[tokenIndexFrom];
       require(dx <= tokenFrom.balanceOf(msg.sender), "swap more than you own");
@@ -730,7 +767,7 @@ library SwapUtils {
 
     self.pooledTokens[tokenIndexTo].safeTransfer(msg.sender, dy);
 
-    emit TokenSwap(self.key, msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
+    emit TokenSwap(msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
 
     return dy;
   }
@@ -750,7 +787,7 @@ library SwapUtils {
     uint8 tokenIndexTo,
     uint256 dy,
     uint256 maxDx
-  ) internal returns (uint256) {
+  ) external returns (uint256) {
     require(dy <= self.balances[tokenIndexTo], ">pool balance");
 
     uint256 dx;
@@ -780,78 +817,7 @@ library SwapUtils {
 
     self.pooledTokens[tokenIndexTo].safeTransfer(msg.sender, dy);
 
-    emit TokenSwap(self.key, msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
-
-    return dx;
-  }
-
-  /**
-   * @notice swap two tokens in the pool internally
-   * @param self Swap struct to read from and write to
-   * @param tokenIndexFrom the token the user wants to sell
-   * @param tokenIndexTo the token the user wants to buy
-   * @param dx the amount of tokens the user wants to sell
-   * @param minDy the min amount the user would like to receive, or revert.
-   * @return amount of token user received on swap
-   */
-  function swapInternal(
-    Swap storage self,
-    uint8 tokenIndexFrom,
-    uint8 tokenIndexTo,
-    uint256 dx,
-    uint256 minDy
-  ) internal returns (uint256) {
-    IERC20 tokenFrom = self.pooledTokens[tokenIndexFrom];
-    require(dx <= tokenFrom.balanceOf(msg.sender), "more than you own");
-
-    uint256 dy;
-    uint256 dyFee;
-    uint256[] memory balances = self.balances;
-    (dy, dyFee) = _calculateSwap(self, tokenIndexFrom, tokenIndexTo, dx, balances);
-    require(dy >= minDy, "dy < minDy");
-
-    uint256 dyAdminFee = (dyFee * self.adminFee) / FEE_DENOMINATOR / self.tokenPrecisionMultipliers[tokenIndexTo];
-
-    self.balances[tokenIndexFrom] = balances[tokenIndexFrom] + dx;
-    self.balances[tokenIndexTo] = balances[tokenIndexTo] - dy - dyAdminFee;
-
-    if (dyAdminFee != 0) {
-      self.adminFees[tokenIndexTo] = self.adminFees[tokenIndexTo] + dyAdminFee;
-    }
-
-    emit TokenSwap(self.key, msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
-
-    return dy;
-  }
-
-  /**
-   * @notice Should get exact amount out of AMM for asset put in
-   */
-  function swapInternalOut(
-    Swap storage self,
-    uint8 tokenIndexFrom,
-    uint8 tokenIndexTo,
-    uint256 dy,
-    uint256 maxDx
-  ) internal returns (uint256) {
-    require(dy <= self.balances[tokenIndexTo], "more than pool balance");
-
-    uint256 dx;
-    uint256 dxFee;
-    uint256[] memory balances = self.balances;
-    (dx, dxFee) = _calculateSwapInv(self, tokenIndexFrom, tokenIndexTo, dy, balances);
-    require(dx <= maxDx, "dx > maxDx");
-
-    uint256 dxAdminFee = (dxFee * self.adminFee) / FEE_DENOMINATOR / self.tokenPrecisionMultipliers[tokenIndexFrom];
-
-    self.balances[tokenIndexFrom] = balances[tokenIndexFrom] + dx - dxAdminFee;
-    self.balances[tokenIndexTo] = balances[tokenIndexTo] - dy;
-
-    if (dxAdminFee != 0) {
-      self.adminFees[tokenIndexFrom] = self.adminFees[tokenIndexFrom] + dxAdminFee;
-    }
-
-    emit TokenSwap(self.key, msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
+    emit TokenSwap(msg.sender, dx, dy, tokenIndexFrom, tokenIndexTo);
 
     return dx;
   }
@@ -869,7 +835,7 @@ library SwapUtils {
     Swap storage self,
     uint256[] memory amounts,
     uint256 minToMint
-  ) internal returns (uint256) {
+  ) external returns (uint256) {
     uint256 numTokens = self.pooledTokens.length;
     require(amounts.length == numTokens, "mismatch pooled tokens");
 
@@ -951,7 +917,7 @@ library SwapUtils {
     // mint the user's LP tokens
     v.lpToken.mint(msg.sender, toMint);
 
-    emit AddLiquidity(self.key, msg.sender, amounts, fees, v.d1, v.totalSupply + toMint);
+    emit AddLiquidity(msg.sender, amounts, fees, v.d1, v.totalSupply + toMint);
 
     return toMint;
   }
@@ -969,7 +935,7 @@ library SwapUtils {
     Swap storage self,
     uint256 amount,
     uint256[] calldata minAmounts
-  ) internal returns (uint256[] memory) {
+  ) external returns (uint256[] memory) {
     LPToken lpToken = self.lpToken;
     require(amount <= lpToken.balanceOf(msg.sender), ">LP.balanceOf");
     uint256 numTokens = self.pooledTokens.length;
@@ -993,7 +959,7 @@ library SwapUtils {
 
     lpToken.burnFrom(msg.sender, amount);
 
-    emit RemoveLiquidity(self.key, msg.sender, amounts, totalSupply - amount);
+    emit RemoveLiquidity(msg.sender, amounts, totalSupply - amount);
 
     return amounts;
   }
@@ -1011,7 +977,7 @@ library SwapUtils {
     uint256 tokenAmount,
     uint8 tokenIndex,
     uint256 minAmount
-  ) internal returns (uint256) {
+  ) external returns (uint256) {
     LPToken lpToken = self.lpToken;
 
     require(tokenAmount <= lpToken.balanceOf(msg.sender), ">LP.balanceOf");
@@ -1032,7 +998,7 @@ library SwapUtils {
     lpToken.burnFrom(msg.sender, tokenAmount);
     self.pooledTokens[tokenIndex].safeTransfer(msg.sender, dy);
 
-    emit RemoveLiquidityOne(self.key, msg.sender, tokenAmount, totalSupply, tokenIndex, dy);
+    emit RemoveLiquidityOne(msg.sender, tokenAmount, totalSupply, tokenIndex, dy);
 
     return dy;
   }
@@ -1051,7 +1017,7 @@ library SwapUtils {
     Swap storage self,
     uint256[] memory amounts,
     uint256 maxBurnAmount
-  ) internal returns (uint256) {
+  ) external returns (uint256) {
     ManageLiquidityInfo memory v = ManageLiquidityInfo(
       0,
       0,
@@ -1119,7 +1085,7 @@ library SwapUtils {
       }
     }
 
-    emit RemoveLiquidityImbalance(self.key, msg.sender, amounts, fees, v.d1, v.totalSupply - tokenAmount);
+    emit RemoveLiquidityImbalance(msg.sender, amounts, fees, v.d1, v.totalSupply - tokenAmount);
 
     return tokenAmount;
   }
@@ -1129,7 +1095,7 @@ library SwapUtils {
    * @param self Swap struct to withdraw fees from
    * @param to Address to send the fees to
    */
-  function withdrawAdminFees(Swap storage self, address to) internal {
+  function withdrawAdminFees(Swap storage self, address to) external {
     uint256 numTokens = self.pooledTokens.length;
     for (uint256 i; i < numTokens; ) {
       IERC20 token = self.pooledTokens[i];
@@ -1151,11 +1117,11 @@ library SwapUtils {
    * @param self Swap struct to update
    * @param newAdminFee new admin fee to be applied on future transactions
    */
-  function setAdminFee(Swap storage self, uint256 newAdminFee) internal {
+  function setAdminFee(Swap storage self, uint256 newAdminFee) external {
     require(newAdminFee <= MAX_ADMIN_FEE, "too high");
     self.adminFee = newAdminFee;
 
-    emit NewAdminFee(self.key, newAdminFee);
+    emit NewAdminFee(newAdminFee);
   }
 
   /**
@@ -1164,10 +1130,61 @@ library SwapUtils {
    * @param self Swap struct to update
    * @param newSwapFee new swap fee to be applied on future transactions
    */
-  function setSwapFee(Swap storage self, uint256 newSwapFee) internal {
+  function setSwapFee(Swap storage self, uint256 newSwapFee) external {
     require(newSwapFee <= MAX_SWAP_FEE, "too high");
     self.swapFee = newSwapFee;
 
-    emit NewSwapFee(self.key, newSwapFee);
+    emit NewSwapFee(newSwapFee);
+  }
+
+  /**
+   * @notice Start ramping up or down A parameter towards given futureA_ and futureTime_
+   * Checks if the change is too rapid, and commits the new A value only when it falls under
+   * the limit range.
+   * @param self Swap struct to update
+   * @param futureA_ the new A to ramp towards
+   * @param futureTime_ timestamp when the new A should be reached
+   */
+  function rampA(
+    Swap storage self,
+    uint256 futureA_,
+    uint256 futureTime_
+  ) external {
+    require(block.timestamp >= self.initialATime + 1 days, "Wait 1 day before starting ramp");
+    require(futureTime_ >= block.timestamp + MIN_RAMP_TIME, "Insufficient ramp time");
+    require(futureA_ != 0 && futureA_ < MAX_A, "futureA_ must be > 0 and < MAX_A");
+
+    uint256 initialAPrecise = _getAPrecise(self);
+    uint256 futureAPrecise = futureA_ * A_PRECISION;
+
+    if (futureAPrecise < initialAPrecise) {
+      require(futureAPrecise * MAX_A_CHANGE >= initialAPrecise, "futureA_ is too small");
+    } else {
+      require(futureAPrecise <= initialAPrecise * MAX_A_CHANGE, "futureA_ is too large");
+    }
+
+    self.initialA = initialAPrecise;
+    self.futureA = futureAPrecise;
+    self.initialATime = block.timestamp;
+    self.futureATime = futureTime_;
+
+    emit RampA(initialAPrecise, futureAPrecise, block.timestamp, futureTime_);
+  }
+
+  /**
+   * @notice Stops ramping A immediately. Once this function is called, rampA()
+   * cannot be called for another 24 hours
+   * @param self Swap struct to update
+   */
+  function stopRampA(Swap storage self) external {
+    require(self.futureATime > block.timestamp, "Ramp is already stopped");
+
+    uint256 currentA = _getAPrecise(self);
+    self.initialA = currentA;
+    self.futureA = currentA;
+    self.initialATime = block.timestamp;
+    self.futureATime = block.timestamp;
+
+    emit StopRampA(currentA, block.timestamp);
   }
 }

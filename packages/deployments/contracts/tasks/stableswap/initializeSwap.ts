@@ -19,6 +19,13 @@ type TaskArgs = {
   env?: Env;
 };
 
+/**
+ * @notice IMPORTANT -- Do *NOT* use this on mainnet to initialize a swap pool until
+ * `setDetails` has been called with the correct canonical details (not the default
+ * ones) on the mad-asset.
+ *
+ * TODO: when updating the scripts after audit fixes, ensure this is an automated check.
+ */
 export default task("initialize-stableswap", "Initializes stable swap")
   .addParam("canonical", "Canonical token address")
   .addParam("domain", "Canonical token domain")

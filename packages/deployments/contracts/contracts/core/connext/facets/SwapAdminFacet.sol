@@ -38,50 +38,50 @@ contract SwapAdminFacet is BaseConnextFacet {
 
   /**
    * @notice Emitted when the owner calls `initializeSwap`
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param swap - The swap that was initialized
    * @param caller - The caller of the function
    */
-  event SwapInitialized(bytes32 indexed canonicalId, SwapUtils.Swap swap, address caller);
+  event SwapInitialized(bytes32 indexed key, SwapUtils.Swap swap, address caller);
 
   /**
    * @notice Emitted when the owner withdraws admin fees
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param caller - The caller of the function
    */
-  event AdminFeesWithdrawn(bytes32 indexed canonicalId, address caller);
+  event AdminFeesWithdrawn(bytes32 indexed key, address caller);
 
   /**
    * @notice Emitted when the owner sets admin fees
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param newAdminFee - The updated fee
    * @param caller - The caller of the function
    */
-  event AdminFeesSet(bytes32 indexed canonicalId, uint256 newAdminFee, address caller);
+  event AdminFeesSet(bytes32 indexed key, uint256 newAdminFee, address caller);
 
   /**
    * @notice Emitted when the owner sets swap fees
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param newSwapFee - The updated fee
    * @param caller - The caller of the function
    */
-  event SwapFeesSet(bytes32 indexed canonicalId, uint256 newSwapFee, address caller);
+  event SwapFeesSet(bytes32 indexed key, uint256 newSwapFee, address caller);
 
   /**
    * @notice Emitted when the owner starts ramping up or down the A parameter
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param futureA - The final A value after ramp
    * @param futureTime - The time A should reach the final value
    * @param caller - The caller of the function
    */
-  event RampAStarted(bytes32 indexed canonicalId, uint256 futureA, uint256 futureTime, address caller);
+  event RampAStarted(bytes32 indexed key, uint256 futureA, uint256 futureTime, address caller);
 
   /**
    * @notice Emitted when the owner stops ramping up or down the A parameter
-   * @param canonicalId - Identifier for asset
+   * @param key - Identifier for asset
    * @param caller - The caller of the function
    */
-  event RampAStopped(bytes32 indexed canonicalId, address caller);
+  event RampAStopped(bytes32 indexed key, address caller);
 
   // ============ External: Getters ============
 
@@ -92,7 +92,7 @@ contract SwapAdminFacet is BaseConnextFacet {
    * LP positions. The owner of LPToken will be this contract - which means
    * only this contract is allowed to mint/burn tokens.
    *
-   * @param _canonicalId the canonical token id
+   * @param _key the hash of the canonical id and domain for token
    * @param _pooledTokens an array of ERC20s this pool will accept
    * @param decimals the decimals to use for each pooled token,
    * eg 8 for WBTC. Cannot be larger than POOL_PRECISION_DECIMALS
@@ -105,7 +105,7 @@ contract SwapAdminFacet is BaseConnextFacet {
    * @param lpTokenTargetAddress the address of an existing LPToken contract to use as a target
    */
   function initializeSwap(
-    bytes32 _canonicalId,
+    bytes32 _key,
     IERC20[] memory _pooledTokens,
     uint8[] memory decimals,
     string memory lpTokenName,
@@ -115,8 +115,7 @@ contract SwapAdminFacet is BaseConnextFacet {
     uint256 _adminFee,
     address lpTokenTargetAddress
   ) external onlyOwner {
-    if (s.swapStorages[_canonicalId].pooledTokens.length != 0)
-      revert SwapAdminFacet__initializeSwap_alreadyInitialized();
+    if (s.swapStorages[_key].pooledTokens.length != 0) revert SwapAdminFacet__initializeSwap_alreadyInitialized();
 
     // Check _pooledTokens and precisions parameter
     if (_pooledTokens.length <= 1 || _pooledTokens.length > 32)
@@ -131,7 +130,7 @@ contract SwapAdminFacet is BaseConnextFacet {
     for (uint8 i; i < numPooledTokens; ) {
       if (i != 0) {
         // Check if index is already used. Check if 0th element is a duplicate.
-        if (s.tokenIndexes[_canonicalId][address(_pooledTokens[i])] != 0 || _pooledTokens[0] == _pooledTokens[i])
+        if (s.tokenIndexes[_key][address(_pooledTokens[i])] != 0 || _pooledTokens[0] == _pooledTokens[i])
           revert SwapAdminFacet__initializeSwap_duplicateTokens();
       }
       if (address(_pooledTokens[i]) == address(0)) revert SwapAdminFacet__initializeSwap_zeroTokenAddress();
@@ -140,7 +139,7 @@ contract SwapAdminFacet is BaseConnextFacet {
         revert SwapAdminFacet__initializeSwap_tokenDecimalsExceedMax();
 
       precisionMultipliers[i] = 10**uint256(SwapUtils.POOL_PRECISION_DECIMALS - decimals[i]);
-      s.tokenIndexes[_canonicalId][address(_pooledTokens[i])] = i;
+      s.tokenIndexes[_key][address(_pooledTokens[i])] = i;
 
       unchecked {
         ++i;
@@ -158,6 +157,7 @@ contract SwapAdminFacet is BaseConnextFacet {
 
     // Initialize swapStorage struct
     SwapUtils.Swap memory entry = SwapUtils.Swap({
+      key: _key,
       initialA: _a * AmplificationUtils.A_PRECISION,
       futureA: _a * AmplificationUtils.A_PRECISION,
       swapFee: _fee,
@@ -170,62 +170,62 @@ contract SwapAdminFacet is BaseConnextFacet {
       initialATime: 0,
       futureATime: 0
     });
-    s.swapStorages[_canonicalId] = entry;
-    emit SwapInitialized(_canonicalId, entry, msg.sender);
+    s.swapStorages[_key] = entry;
+    emit SwapInitialized(_key, entry, msg.sender);
   }
 
   /**
    * @notice Withdraw all admin fees to the contract owner
-   * @param canonicalId the canonical token id
+   * @param key Hash of the canonical domain and id
    */
-  function withdrawSwapAdminFees(bytes32 canonicalId) external onlyOwner {
-    s.swapStorages[canonicalId].withdrawAdminFees(msg.sender);
-    emit AdminFeesWithdrawn(canonicalId, msg.sender);
+  function withdrawSwapAdminFees(bytes32 key) external onlyOwner nonReentrant {
+    s.swapStorages[key].withdrawAdminFees(msg.sender);
+    emit AdminFeesWithdrawn(key, msg.sender);
   }
 
   /**
    * @notice Update the admin fee. Admin fee takes portion of the swap fee.
-   * @param canonicalId the canonical token id
+   * @param key Hash of the canonical domain and id
    * @param newAdminFee new admin fee to be applied on future transactions
    */
-  function setSwapAdminFee(bytes32 canonicalId, uint256 newAdminFee) external onlyOwner {
-    s.swapStorages[canonicalId].setAdminFee(newAdminFee);
-    emit AdminFeesSet(canonicalId, newAdminFee, msg.sender);
+  function setSwapAdminFee(bytes32 key, uint256 newAdminFee) external onlyOwner {
+    s.swapStorages[key].setAdminFee(newAdminFee);
+    emit AdminFeesSet(key, newAdminFee, msg.sender);
   }
 
   /**
    * @notice Update the swap fee to be applied on swaps
-   * @param canonicalId the canonical token id
+   * @param key Hash of the canonical domain and id
    * @param newSwapFee new swap fee to be applied on future transactions
    */
-  function setSwapFee(bytes32 canonicalId, uint256 newSwapFee) external onlyOwner {
-    s.swapStorages[canonicalId].setSwapFee(newSwapFee);
-    emit SwapFeesSet(canonicalId, newSwapFee, msg.sender);
+  function setSwapFee(bytes32 key, uint256 newSwapFee) external onlyOwner {
+    s.swapStorages[key].setSwapFee(newSwapFee);
+    emit SwapFeesSet(key, newSwapFee, msg.sender);
   }
 
   /**
    * @notice Start ramping up or down A parameter towards given futureA and futureTime
    * Checks if the change is too rapid, and commits the new A value only when it falls under
    * the limit range.
-   * @param canonicalId the canonical token id
+   * @param key Hash of the canonical domain and id
    * @param futureA the new A to ramp towards
    * @param futureTime timestamp when the new A should be reached
    */
   function rampA(
-    bytes32 canonicalId,
+    bytes32 key,
     uint256 futureA,
     uint256 futureTime
   ) external onlyOwner {
-    s.swapStorages[canonicalId].rampA(futureA, futureTime);
-    emit RampAStarted(canonicalId, futureA, futureTime, msg.sender);
+    s.swapStorages[key].rampA(futureA, futureTime);
+    emit RampAStarted(key, futureA, futureTime, msg.sender);
   }
 
   /**
    * @notice Stop ramping A immediately. Reverts if ramp A is already stopped.
-   * @param canonicalId the canonical token id
+   * @param key Hash of the canonical domain and id
    */
-  function stopRampA(bytes32 canonicalId) external onlyOwner {
-    s.swapStorages[canonicalId].stopRampA();
-    emit RampAStopped(canonicalId, msg.sender);
+  function stopRampA(bytes32 key) external onlyOwner {
+    s.swapStorages[key].stopRampA();
+    emit RampAStopped(key, msg.sender);
   }
 }

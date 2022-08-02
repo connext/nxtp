@@ -9,11 +9,11 @@ import {
   StableSwap as TStableSwap,
 } from "@connext/nxtp-contracts";
 import PriceOracleArtifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/helpers/ConnextPriceOracle.sol/ConnextPriceOracle.json";
-import ERC20Artifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/helpers/OZERC20.sol/ERC20.json";
 import ConnextArtifact from "@connext/nxtp-contracts/artifacts/hardhat-diamond-abi/HardhatDiamondABI.sol/ConnextHandler.json";
 import ERC20ExtendedArtifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/interfaces/IERC20Extended.sol/IERC20Extended.json";
 import StableSwapArtifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/helpers/StableSwap.sol/StableSwap.json";
-import TokenRegistryArtifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/helpers/TokenRegistry.sol/TokenRegistry.json";
+import ITokenRegistryArtifact from "@connext/nxtp-contracts/artifacts/contracts/core/connext/interfaces/ITokenRegistry.sol/ITokenRegistry.json";
+import { ERC20Abi } from "@connext/nxtp-utils";
 
 export type ContractPostfix = "Staging" | "";
 
@@ -143,7 +143,7 @@ export const contractDeployments: ConnextContractDeployments = {
  * @returns An ethers Interface object initialized for the corresponding ABI.
  */
 
-export const getErc20Interface = () => new utils.Interface(ERC20Artifact.abi) as TIERC20Minimal["interface"];
+export const getErc20Interface = () => new utils.Interface(ERC20Abi) as TIERC20Minimal["interface"];
 
 export const getErc20ExtendedInterface = () =>
   new utils.Interface(ERC20ExtendedArtifact.abi) as TIERC20Extended["interface"];
@@ -154,7 +154,7 @@ export const getPriceOracleInterface = () =>
   new utils.Interface(PriceOracleArtifact.abi) as TConnextPriceOracle["interface"];
 
 export const getTokenRegistryInterface = () =>
-  new utils.Interface(TokenRegistryArtifact.abi) as TTokenRegistry["interface"];
+  new utils.Interface(ITokenRegistryArtifact.abi) as TTokenRegistry["interface"];
 
 export const getStableSwapInterface = () => new utils.Interface(StableSwapArtifact.abi) as TStableSwap["interface"];
 

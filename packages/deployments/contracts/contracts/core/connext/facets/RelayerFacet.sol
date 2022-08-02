@@ -131,7 +131,7 @@ contract RelayerFacet is BaseConnextFacet {
     uint32 _domain,
     address _recipient,
     bytes32[] calldata _transferIds
-  ) external whenNotPaused {
+  ) external whenNotPaused nonReentrant {
     // Make sure the transferIds length is greater than 0.
     // This is to make sure a valid relayer is calling this function.
     uint256 numTransfers = _transferIds.length;
@@ -159,7 +159,7 @@ contract RelayerFacet is BaseConnextFacet {
    * @param _recipient - address on origin chain to send claimed funds to
    * @param _transferIds - transferIds to claim
    */
-  function claim(address _recipient, bytes32[] calldata _transferIds) external onlyRelayerFeeRouter {
+  function claim(address _recipient, bytes32[] calldata _transferIds) external onlyRelayerFeeRouter nonReentrant {
     uint256 numTransfers = _transferIds.length;
     // Tally amounts owed
     uint256 total;

@@ -1,7 +1,7 @@
 import { utils } from "ethers";
 
 import { ConnextHandlerAbi, TokenRegistryAbi } from "./abi";
-import { TokenRegistryInterface as TTokenRegistryInterface } from "./typechain-types/contracts/core/connext/helpers/TokenRegistry";
+import { ITokenRegistryInterface as TTokenRegistryInterface } from "./typechain-types/contracts/core/connext/interfaces/ITokenRegistry";
 import { ConnextHandlerInterface as TConnextHandlerInterface } from "./typechain-types/hardhat-diamond-abi/HardhatDiamondABI.sol/ConnextHandler";
 
 export const ConnextHandlerInterface = new utils.Interface(ConnextHandlerAbi) as TConnextHandlerInterface;

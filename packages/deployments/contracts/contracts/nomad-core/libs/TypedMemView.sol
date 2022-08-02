@@ -422,7 +422,7 @@ library TypedMemView {
    * @return          uint256 - The number of memory words
    */
   function words(bytes29 memView) internal pure returns (uint256) {
-    return (uint256(len(memView)) + 32) / 32;
+    return (uint256(len(memView)) + 31) / 32;
   }
 
   /**

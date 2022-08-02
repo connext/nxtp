@@ -27,6 +27,6 @@
   "function removeLiquidityImbalance(uint256[],uint256,uint256) returns (uint256)",
   "function removeLiquidityOneToken(uint256,uint8,uint256,uint256) returns (uint256)",
   "function swap(uint8,uint8,uint256,uint256,uint256) returns (uint256)",
-  "function swapExact(uint256,address,address,uint256) payable returns (uint256)",
-  "function swapExactOut(uint256,address,address,uint256) payable returns (uint256)"
+  "function swapExact(uint256,address,address,uint256,uint256) payable returns (uint256)",
+  "function swapExactOut(uint256,address,address,uint256,uint256) payable returns (uint256)"
 ]

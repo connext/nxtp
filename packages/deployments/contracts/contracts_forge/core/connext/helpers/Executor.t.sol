@@ -237,30 +237,6 @@ contract ExecutorTest is ForgeHelper {
     );
   }
 
-  // Should gracefully handle failures if value != amount
-  function test_Executor__execute_handlesIfValueIsNotAmount() public {
-    // Get the calldata
-    bytes memory data = abi.encodeWithSelector(MockStaking.stake.selector, address(0), 100);
-    bytes memory property = LibCrossDomainProperty.EMPTY_BYTES;
-
-    uint256 amount = 100;
-    address to = address(mockStaking);
-
-    uint256 initRecovery = recovery.balance;
-    uint256 initTo = to.balance;
-
-    vm.expectEmit(true, true, true, true);
-    emit Executed(transferId, to, recovery, address(0), 99, property, data, bytes(""), false);
-
-    (bool success, ) = executor.execute{value: 99}(
-      IExecutor.ExecutorArgs(transferId, amount, address(mockStaking), payable(recovery), address(0), property, data)
-    );
-    assertTrue(!success);
-
-    assertEq(to.balance, initTo);
-    assertEq(recovery.balance, initRecovery + 99);
-  }
-
   // Should gracefully handle failure of no code at to
   function test_Executor__execute_handlesNoCodeFailure() public {
     // Get the calldata
@@ -287,31 +263,6 @@ contract ExecutorTest is ForgeHelper {
 
     // should have transferred funds to recovery address
     assertEq(asset.balanceOf(recovery), initRecovery + amount);
-  }
-
-  // Should gracefully handle failure of no code at to if using native
-  function test_Executor__execute_handlesNoCodeFailureWithNative() public {
-    // Get the calldata
-    bytes memory data = abi.encodeWithSelector(PropertyQuery.setAmount.selector, "");
-    bytes memory property = LibCrossDomainProperty.EMPTY_BYTES;
-
-    // Get starting recovery balance
-    uint256 initRecovery = recovery.balance;
-
-    // send tx
-    uint256 amount = 1200;
-    address to = payable(address(12344321));
-
-    vm.expectEmit(true, true, true, true);
-    emit Executed(transferId, to, recovery, address(0), amount, property, data, bytes(""), false);
-
-    (bool success, ) = executor.execute{value: amount}(
-      IExecutor.ExecutorArgs(transferId, amount, to, payable(recovery), address(0), property, data)
-    );
-    assertTrue(!success);
-
-    // should have transferred funds to recovery address
-    assertEq(recovery.balance, initRecovery + amount);
   }
 
   // Should hande the case if excessivlySafeCall fails
@@ -377,25 +328,6 @@ contract ExecutorTest is ForgeHelper {
     assertEq(asset.balanceOf(recovery), initRecovery);
   }
 
-  // Should work with native asset
-  function test_Executor__execute_worksWithNativeAsset() public {
-    // Get the calldata
-    bytes memory data = abi.encodeWithSelector(MockStaking.stake.selector, address(0), 100);
-    bytes memory property = LibCrossDomainProperty.EMPTY_BYTES;
-
-    uint256 amount = 100;
-    address to = address(mockStaking);
-
-    vm.expectEmit(true, true, true, true);
-    emit Executed(transferId, to, recovery, address(0), amount, property, data, abi.encodePacked(amount), true);
-
-    (bool success, ) = executor.execute{value: 100}(
-      IExecutor.ExecutorArgs(transferId, amount, to, payable(recovery), address(0), property, data)
-    );
-
-    assertTrue(success);
-  }
-
   // Should work with tokens
   function test_Executor__execute_worksWithToken() public {
     // Get the calldata
@@ -414,8 +346,8 @@ contract ExecutorTest is ForgeHelper {
     vm.expectEmit(true, true, true, true);
     emit Executed(transferId, to, recovery, address(asset), amount, property, data, abi.encodePacked(amount), true);
 
-    (bool success, ) = executor.execute{value: 100}(
-      IExecutor.ExecutorArgs(transferId, amount, to, payable(recovery), address(asset), property, data)
+    (bool success, ) = executor.execute(
+      IExecutor.ExecutorArgs(transferId, amount, to, recovery, address(asset), property, data)
     );
 
     assertTrue(success);

@@ -7,7 +7,7 @@ interface ISponsorVault {
   // - return the amount of liquidity router was reimbursed
   function reimburseLiquidityFees(
     address token,
-    uint256 amount,
+    uint256 amount, // Fee amount, not transfer amount
     address receiver
   ) external returns (uint256);
 

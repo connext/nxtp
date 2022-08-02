@@ -102,21 +102,32 @@ contract PromiseRouterTest is ForgeHelper, PromiseRouter {
     assertEq(address(promiseRouter.connext()), updated);
   }
 
+  // ============ setReserveGas ============
+  function test_PromiseRouter__setReserveGas_failsIfNotOwner() public {
+    uint256 updated = 1234;
+
+    vm.expectRevert(ProposedOwnable.ProposedOwnable__onlyOwner_notOwner.selector);
+    vm.prank(address(1234));
+    promiseRouter.setReserveGas(updated);
+  }
+
+  // Should work
+  function test_PromiseRouter__setReserveGas_shouldWork() public {
+    uint256 updated = 1234;
+    vm.expectEmit(true, true, true, true);
+    emit ReserveGasSet(promiseRouter.RESERVE_GAS(), updated);
+
+    vm.prank(promiseRouter.owner());
+    promiseRouter.setReserveGas(updated);
+    assertEq(promiseRouter.RESERVE_GAS(), updated);
+  }
+
   // ============ send ============
   // Fail if not called by connext
   function test_PromiseRouter__send_failsIfNotConnext(bool returnSuccess, bytes calldata returnData) public {
     vm.assume(returnData.length != 0);
     vm.prank(address(0));
     vm.expectRevert(abi.encodeWithSelector(PromiseRouter.PromiseRouter__onlyConnext_notConnext.selector));
-
-    promiseRouter.send(_domain, _transferId, _callback, returnSuccess, returnData);
-  }
-
-  // Fail if return data is empty
-  function test_PromiseRouter__send_failsIfEmptyReturnData(bool returnSuccess, bytes calldata returnData) public {
-    vm.assume(returnData.length == 0);
-    vm.prank(_connext);
-    vm.expectRevert(abi.encodeWithSelector(PromiseRouter.PromiseRouter__send_returndataEmpty.selector));
 
     promiseRouter.send(_domain, _transferId, _callback, returnSuccess, returnData);
   }
@@ -151,6 +162,19 @@ contract PromiseRouterTest is ForgeHelper, PromiseRouter {
 
     bytes memory message = PromiseMessage.formatPromiseCallback(_transferId, _callback, returnSuccess, returnData);
 
+    vm.expectCall(_xAppHome, abi.encodeWithSelector(MockHome.dispatch.selector, _domain, _remote, message));
+    vm.expectEmit(true, true, true, true);
+    emit Send(_domain, _remote, _transferId, _callback, returnSuccess, returnData, message);
+
+    promiseRouter.send(_domain, _transferId, _callback, returnSuccess, returnData);
+  }
+
+  // Should work if empty return data
+  function test_PromiseRouter__send_shouldWorkIfEmptyReturnData(bool returnSuccess, bytes calldata returnData) public {
+    vm.assume(returnData.length == 0);
+    vm.prank(_connext);
+
+    bytes memory message = PromiseMessage.formatPromiseCallback(_transferId, _callback, returnSuccess, returnData);
     vm.expectCall(_xAppHome, abi.encodeWithSelector(MockHome.dispatch.selector, _domain, _remote, message));
     vm.expectEmit(true, true, true, true);
     emit Send(_domain, _remote, _transferId, _callback, returnSuccess, returnData, message);
@@ -323,7 +347,7 @@ contract PromiseRouterTest is ForgeHelper, PromiseRouter {
     vm.expectCall(_callback, abi.encodeWithSelector(ICallback.callback.selector, _transferId, success, returnData));
 
     vm.expectEmit(true, true, true, true);
-    emit CallbackExecuted(_transferId, address(this));
+    emit CallbackExecuted(_transferId, true, address(this));
 
     promiseRouter.process(_transferId, message);
 
@@ -365,6 +389,10 @@ contract PromiseRouterTest is ForgeHelper, PromiseRouter {
     promiseRouter.bumpCallbackFee{value: callbackFee}(_transferId);
     uint256 beforeBalance = address(promiseRouter).balance;
 
+    // force callback failure
+    MockCallback(_callback).shouldFail(true);
+    assertTrue(MockCallback(_callback).fails());
+
     // mock relayer approval
     vm.mockCall(_connext, abi.encodeWithSelector(IConnextHandler.approvedRelayers.selector), abi.encode(true));
 
@@ -372,7 +400,57 @@ contract PromiseRouterTest is ForgeHelper, PromiseRouter {
     vm.expectCall(_callback, abi.encodeWithSelector(ICallback.callback.selector, _transferId, success, returnData));
 
     vm.expectEmit(true, true, true, true);
-    emit CallbackExecuted(_transferId, relayer);
+    emit CallbackExecuted(_transferId, false, relayer);
+
+    vm.prank(relayer);
+    promiseRouter.process(_transferId, message);
+
+    // check if promiseMessage cleared after callback
+    assertEq(promiseRouter.messageHashes(_transferId), bytes32(0));
+
+    // check if callbackFee cleared after callback
+    assertTrue(promiseRouter.callbackFees(_transferId) == 0);
+
+    // check if callback fee is transferred to relayer
+    assertEq(relayer.balance, relayerBeforeBalance + callbackFee);
+    assertEq(address(promiseRouter).balance, beforeBalance - callbackFee);
+  }
+
+  // Should work if callback fails
+  function test_PromiseRouter__process_failingCallbackShouldWork(bytes calldata returnData, uint32 nonce) public {
+    vm.assume(returnData.length != 0);
+    bool success = true;
+    bytes memory message = utils_formatPromiseCallback(success, returnData);
+    bytes29 _msg = message.ref(0).mustBePromiseCallback();
+
+    uint256 callbackFee = 0.01 ether;
+    vm.deal(address(promiseRouter), 10 ether);
+
+    address relayer = address(123456654321);
+    uint256 relayerBeforeBalance = relayer.balance;
+
+    // mock is replica result for handle
+    vm.mockCall(
+      _xAppConnectionManager,
+      abi.encodeWithSelector(XAppConnectionManager.isReplica.selector),
+      abi.encode(true)
+    );
+
+    promiseRouter.handle(_domain, nonce, _remote, message);
+    assertEq(promiseRouter.messageHashes(_transferId), _msg.keccak());
+
+    // bump fee
+    promiseRouter.bumpCallbackFee{value: callbackFee}(_transferId);
+    uint256 beforeBalance = address(promiseRouter).balance;
+
+    // mock relayer approval
+    vm.mockCall(_connext, abi.encodeWithSelector(IConnextHandler.approvedRelayers.selector), abi.encode(true));
+
+    // check if callback executed
+    vm.expectCall(_callback, abi.encodeWithSelector(ICallback.callback.selector, _transferId, success, returnData));
+
+    vm.expectEmit(true, true, true, true);
+    emit CallbackExecuted(_transferId, true, relayer);
 
     vm.prank(relayer);
     promiseRouter.process(_transferId, message);

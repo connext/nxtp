@@ -1,9 +1,8 @@
 [
   "error BaseConnextFacet__nonReentrant_reentrantCall()",
+  "error BaseConnextFacet__onlyBridgeRouter_notBridgeRouter()",
   "error BaseConnextFacet__onlyOwner_notOwner()",
   "error BaseConnextFacet__onlyProposed_notProposedOwner()",
-  "error BaseConnextFacet__onlyRemoteRouter_notRemoteRouter()",
-  "error BaseConnextFacet__onlyReplica_notReplica()",
   "error BaseConnextFacet__whenNotPaused_paused()",
   "error StableSwapFacet__deadlineCheck_deadlineNotMet()",
   "error StableSwapFacet__getSwapTokenBalance_indexOutOfRange()",
@@ -27,6 +26,6 @@
   "function removeSwapLiquidityImbalance(bytes32,uint256[],uint256,uint256) returns (uint256)",
   "function removeSwapLiquidityOneToken(bytes32,uint256,uint8,uint256,uint256) returns (uint256)",
   "function swap(bytes32,uint8,uint8,uint256,uint256,uint256) returns (uint256)",
-  "function swapExact(bytes32,uint256,address,address,uint256,uint256) payable returns (uint256)",
-  "function swapExactOut(bytes32,uint256,address,address,uint256,uint256) payable returns (uint256)"
+  "function swapExact(bytes32,uint256,address,address,uint256,uint256) returns (uint256)",
+  "function swapExactOut(bytes32,uint256,address,address,uint256,uint256) returns (uint256)"
 ]

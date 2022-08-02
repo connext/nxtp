@@ -11,7 +11,7 @@ pragma solidity ^0.8.0;
 import {IDiamondLoupe} from "../../interfaces/IDiamondLoupe.sol";
 import {IDiamondCut} from "../../interfaces/IDiamondCut.sol";
 import {IERC165} from "../../interfaces/IERC165.sol";
-import {IWrapped} from "../../interfaces/IWrapped.sol";
+import {IWeth} from "../../interfaces/IWeth.sol";
 import {ITokenRegistry} from "../../interfaces/ITokenRegistry.sol";
 
 import {Executor} from "../../helpers/Executor.sol";
@@ -35,9 +35,7 @@ contract DiamondInit is BaseConnextFacet {
   // data to set your own state variables
   function init(
     uint32 _domain,
-    address _xAppConnectionManager,
     address _tokenRegistry, // Nomad token registry
-    address _wrappedNative,
     address _relayerFeeRouter,
     address payable _promiseRouter
   ) external {
@@ -60,10 +58,6 @@ contract DiamondInit is BaseConnextFacet {
       LibDiamond.enforceIsContractOwner();
 
       s.initialized = true;
-      // __XAppConnectionClient_initialize
-      s.xAppConnectionManager = XAppConnectionManager(_xAppConnectionManager);
-
-      // __ProposedOwnable_init
 
       // __ReentrancyGuard_init_unchained
       s._status = _NOT_ENTERED;
@@ -74,9 +68,7 @@ contract DiamondInit is BaseConnextFacet {
       s.promiseRouter = PromiseRouter(_promiseRouter);
       s.executor = new Executor(address(this));
       s.tokenRegistry = ITokenRegistry(_tokenRegistry);
-      s.wrapper = IWrapped(_wrappedNative);
       s.LIQUIDITY_FEE_NUMERATOR = 9995;
-      s.LIQUIDITY_FEE_DENOMINATOR = 10000;
       s.maxRoutersPerTransfer = 5;
     }
   }

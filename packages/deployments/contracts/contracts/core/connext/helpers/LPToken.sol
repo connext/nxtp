@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.15;
 
-import {ERC20BurnableUpgradeable, ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /**
@@ -10,7 +10,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
  * It is used to represent user's shares when providing liquidity to swap contracts.
  * @dev Only Swap contracts should initialize and own LPToken contracts.
  */
-contract LPToken is ERC20BurnableUpgradeable, OwnableUpgradeable {
+contract LPToken is ERC20Upgradeable, OwnableUpgradeable {
   // ============ Upgrade Gap ============
 
   uint256[49] private __GAP; // gap for upgrade safety
@@ -60,6 +60,17 @@ contract LPToken is ERC20BurnableUpgradeable, OwnableUpgradeable {
       _mint(address(1), MINIMUM_LIQUIDITY);
     }
     _mint(recipient, amount);
+  }
+
+  /**
+   * @notice Burns the given amount of LPToken from provided account
+   * @dev only owner can call this burn function
+   * @param account address of account from which to burn token
+   * @param amount amount of tokens to mint
+   */
+  function burnFrom(address account, uint256 amount) external onlyOwner {
+    require(amount != 0, "LPToken: cannot burn 0");
+    _burn(account, amount);
   }
 
   // ============ Internal functions ============

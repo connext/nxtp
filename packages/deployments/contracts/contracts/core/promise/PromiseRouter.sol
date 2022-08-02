@@ -3,12 +3,12 @@ pragma solidity 0.8.15;
 
 import {Home} from "../../nomad-core/contracts/Home.sol";
 import {TypedMemView} from "../../nomad-core/libs/TypedMemView.sol";
+import {ExcessivelySafeCall} from "../../nomad-core/libs/ExcessivelySafeCall.sol";
 
 import {AddressUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import {IConnextHandler} from "../connext/interfaces/IConnextHandler.sol";
-import {IBridgeToken} from "../connext/interfaces/IBridgeToken.sol";
 
 import {Router} from "../shared/Router.sol";
 import {XAppConnectionClient} from "../shared/XAppConnectionClient.sol";
@@ -19,6 +19,9 @@ import {PromiseMessage} from "./libraries/PromiseMessage.sol";
 
 /**
  * @title PromiseRouter
+ * @notice This contract processes data returned from the `Executor`.
+ * **IMPORTANT NOTE** which is capped at 256 bytes. This means the data returned is
+ * capped by the executor!
  */
 contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
   // ============ Libraries ============
@@ -57,6 +60,17 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
    * Can add while xcall or bumping callback fee
    */
   mapping(bytes32 => uint256) public callbackFees;
+
+  /**
+   * @notice The maximum number of bytes to store in the return data
+   */
+  uint16 public MAX_COPY;
+
+  /**
+   * @notice Gas to reserve if `callback` fails to process
+   * @dev Should be sufficient to payout relayer and emit event
+   */
+  uint256 public RESERVE_GAS;
 
   // ============ Upgrade Gap ============
 
@@ -118,15 +132,23 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
   /**
    * @notice Emitted when callback function executed
    * @param transferId The transferId
+   * @param success Whether the callback was successful
    * @param relayer The address of the relayer which executed the callback
    */
-  event CallbackExecuted(bytes32 indexed transferId, address relayer);
+  event CallbackExecuted(bytes32 indexed transferId, bool success, address relayer);
 
   /**
    * @notice Emitted when a new Connext address is set
    * @param connext The new connext address
    */
   event SetConnext(address indexed connext);
+
+  /**
+   * @notice Emitted when a new RESERVE_GAS is set
+   * @param previous The previous RESERVE_GAS
+   * @param updated The updated RESERVE_GAS
+   */
+  event ReserveGasSet(uint256 previous, uint256 updated);
 
   // ============ Modifiers ============
 
@@ -142,7 +164,11 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
 
   function initialize(address _xAppConnectionManager) public initializer {
     __XAppConnectionClient_initialize(_xAppConnectionManager);
+    MAX_COPY = 256;
+    RESERVE_GAS = 50_000;
   }
+
+  // ======== External: Admin functions =========
 
   /**
    * @notice Sets the Connext.
@@ -152,6 +178,15 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
   function setConnext(address _connext) external onlyOwner {
     connext = IConnextHandler(_connext);
     emit SetConnext(_connext);
+  }
+
+  /**
+   * @notice Sets the reserve gas.
+   * @param _reserve The updated gas to reserve
+   */
+  function setReserveGas(uint256 _reserve) external onlyOwner {
+    emit ReserveGasSet(RESERVE_GAS, _reserve);
+    RESERVE_GAS = _reserve;
   }
 
   // ======== External: Send PromiseCallback =========
@@ -171,7 +206,6 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
     bool _returnSuccess,
     bytes calldata _returnData
   ) external onlyConnext {
-    if (_returnData.length == 0) revert PromiseRouter__send_returndataEmpty();
     if (_callbackAddress == address(0)) revert PromiseRouter__send_callbackEmpty();
 
     // get remote PromiseRouter address; revert if not found
@@ -245,12 +279,19 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
     delete messageHashes[transferId];
 
     // remove callback fees
-    callbackFees[transferId] = 0;
+    delete callbackFees[transferId];
 
     // execute callback
-    ICallback(callbackAddress).callback(transferId, _msg.returnSuccess(), _msg.returnData());
+    uint256 gas = gasleft() - RESERVE_GAS;
+    (bool success, ) = ExcessivelySafeCall.excessivelySafeCall(
+      callbackAddress,
+      gas,
+      0, // value
+      MAX_COPY,
+      abi.encodeWithSelector(ICallback.callback.selector, transferId, _msg.returnSuccess(), _msg.returnData())
+    );
 
-    emit CallbackExecuted(transferId, msg.sender);
+    emit CallbackExecuted(transferId, success, msg.sender);
 
     // Should transfer the stored relayer fee to the msg.sender
     if (callbackFee != 0) {
@@ -262,7 +303,7 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
    * @notice This function will be called on the origin domain to init the callback fee while xcall
    * @param _transferId - The unique identifier of the crosschain transaction
    */
-  function initCallbackFee(bytes32 _transferId) external payable onlyConnext {
+  function initCallbackFee(bytes32 _transferId) external payable onlyConnext nonReentrant {
     if (msg.value == 0) revert PromiseRouter__initCallbackFee_valueIsZero();
 
     callbackFees[_transferId] += msg.value;
@@ -274,7 +315,7 @@ contract PromiseRouter is Version, Router, ReentrancyGuardUpgradeable {
    * @notice This function will be called on the origin domain to increase the callback fee
    * @param _transferId - The unique identifier of the crosschain transaction
    */
-  function bumpCallbackFee(bytes32 _transferId) external payable {
+  function bumpCallbackFee(bytes32 _transferId) external payable nonReentrant {
     if (msg.value == 0) revert PromiseRouter__bumpCallbackFee_valueIsZero();
 
     // use the presence of the message to evaluate if the fee should be bumped.

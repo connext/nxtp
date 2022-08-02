@@ -3,7 +3,7 @@ pragma solidity 0.8.15;
 
 import {Home} from "../../../nomad-core/contracts/Home.sol";
 
-import {AppStorage} from "../libraries/LibConnextStorage.sol";
+import {CallParams, AppStorage, TokenId} from "../libraries/LibConnextStorage.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 
 contract BaseConnextFacet {
@@ -12,14 +12,14 @@ contract BaseConnextFacet {
   // ========== Properties ===========
   uint256 internal constant _NOT_ENTERED = 1;
   uint256 internal constant _ENTERED = 2;
+  uint256 internal constant BPS_FEE_DENOMINATOR = 10_000;
 
   // Contains hash of empty bytes
-  bytes32 internal constant EMPTY = hex"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
+  bytes32 internal constant EMPTY_HASH = hex"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470";
 
   // ========== Custom Errors ===========
 
-  error BaseConnextFacet__onlyRemoteRouter_notRemoteRouter();
-  error BaseConnextFacet__onlyReplica_notReplica();
+  error BaseConnextFacet__onlyBridgeRouter_notBridgeRouter();
   error BaseConnextFacet__onlyOwner_notOwner();
   error BaseConnextFacet__onlyProposed_notProposedOwner();
   error BaseConnextFacet__whenNotPaused_paused();
@@ -49,20 +49,10 @@ contract BaseConnextFacet {
   }
 
   /**
-   * @notice Only accept messages from a remote Router contract
-   * @param _origin The domain the message is coming from
-   * @param _router The address the message is coming from
+   * @notice Throws if called by any account other than the proposed owner.
    */
-  modifier onlyRemoteRouter(uint32 _origin, bytes32 _router) {
-    if (!_isRemoteRouter(_origin, _router)) revert BaseConnextFacet__onlyRemoteRouter_notRemoteRouter();
-    _;
-  }
-
-  /**
-   * @notice Only accept messages from an Nomad Replica contract
-   */
-  modifier onlyReplica() {
-    if (!_isReplica(msg.sender)) revert BaseConnextFacet__onlyReplica_notReplica();
+  modifier onlyBridgeRouter() {
+    if (address(s.bridgeRouter) != msg.sender) revert BaseConnextFacet__onlyBridgeRouter_notBridgeRouter();
     _;
   }
 
@@ -92,61 +82,46 @@ contract BaseConnextFacet {
 
   // ============ Internal functions ============
   /**
-   * @notice Indicates if the ownership of the router whitelist has
-   * been renounced
+   * @notice Indicates if the router whitelist has been removed
    */
-  function _isRouterOwnershipRenounced() internal view returns (bool) {
-    return LibDiamond.contractOwner() == address(0) || s._routerOwnershipRenounced;
+  function _isRouterWhitelistRemoved() internal view returns (bool) {
+    return LibDiamond.contractOwner() == address(0) || s._routerWhitelistRemoved;
   }
 
   /**
-   * @notice Indicates if the ownership of the asset whitelist has
-   * been renounced
+   * @notice Indicates if the asset whitelist has been removed
    */
-  function _isAssetOwnershipRenounced() internal view returns (bool) {
-    return LibDiamond.contractOwner() == address(0) || s._assetOwnershipRenounced;
+  function _isAssetWhitelistRemoved() internal view returns (bool) {
+    return LibDiamond.contractOwner() == address(0) || s._assetWhitelistRemoved;
   }
 
   /**
-   * @notice Return true if the given domain / router is the address of a remote xApp Router
-   * @param _domain The domain of the potential remote xApp Router
-   * @param _router The address of the potential remote xApp Router
+   * @notice Calculates a transferId
    */
-  function _isRemoteRouter(uint32 _domain, bytes32 _router) internal view returns (bool) {
-    return s.remotes[_domain] == _router && _router != bytes32(0);
+  function _calculateTransferId(
+    CallParams memory _params,
+    uint256 _amount,
+    uint256 _nonce,
+    bytes32 _canonicalId,
+    uint32 _canonicalDomain,
+    address _originSender
+  ) internal pure returns (bytes32) {
+    return keccak256(abi.encode(_nonce, _params, _originSender, _canonicalId, _canonicalDomain, _amount));
   }
 
   /**
-   * @notice Assert that the given domain has a xApp Router registered and return its address
-   * @param _domain The domain of the chain for which to get the xApp Router
-   * @return _remote The address of the remote xApp Router on _domain
+   * @notice Calculates the hash of canonical id and domain
+   * @dev This hash is used as the key for many asset-related mappings
    */
-  function _mustHaveRemote(uint32 _domain) internal view returns (bytes32 _remote) {
-    _remote = s.remotes[_domain];
-    require(_remote != bytes32(0), "!remote");
+  function _calculateCanonicalHash(bytes32 _id, uint32 _domain) internal pure returns (bytes32) {
+    return keccak256(abi.encode(_id, _domain));
   }
 
   /**
-   * @notice Get the local Home contract from the xAppConnectionManager
-   * @return The local Home contract
+   * @notice Calculates the hash of canonical id and domain
+   * @dev This is an alias to allow usage of `TokenId` struct directly
    */
-  function _home() internal view returns (Home) {
-    return s.xAppConnectionManager.home();
-  }
-
-  /**
-   * @notice Determine whether _potentialReplica is an enrolled Replica from the xAppConnectionManager
-   * @return True if _potentialReplica is an enrolled Replica
-   */
-  function _isReplica(address _potentialReplica) internal view returns (bool) {
-    return s.xAppConnectionManager.isReplica(_potentialReplica);
-  }
-
-  /**
-   * @notice Get the local domain from the xAppConnectionManager
-   * @return The local domain
-   */
-  function _localDomain() internal view virtual returns (uint32) {
-    return s.xAppConnectionManager.localDomain();
+  function _calculateCanonicalHash(TokenId calldata _canonical) internal pure returns (bytes32) {
+    return _calculateCanonicalHash(_canonical.id, _canonical.domain);
   }
 }

@@ -3195,6 +3195,7 @@ __metadata:
   version: 0.1.0
   resolution: "@graphql-yoga/typed-event-target@npm:0.1.0"
   dependencies:
+    "@graphql-yoga/typed-event-target": ^0.1.0
     "@repeaterjs/repeater": ^3.0.4
     tslib: ^2.3.1
   checksum: 2688325f592369e806727233949cad27892157f0856aff07aea5a38e5377e2c02ac5e4fca3dd8ae2affaa55d77c14677a1a80da0d30a6e170bda50350a70b83c

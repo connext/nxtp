@@ -1,9 +1,8 @@
 [
   "error BaseConnextFacet__nonReentrant_reentrantCall()",
+  "error BaseConnextFacet__onlyBridgeRouter_notBridgeRouter()",
   "error BaseConnextFacet__onlyOwner_notOwner()",
   "error BaseConnextFacet__onlyProposed_notProposedOwner()",
-  "error BaseConnextFacet__onlyRemoteRouter_notRemoteRouter()",
-  "error BaseConnextFacet__onlyReplica_notReplica()",
   "error BaseConnextFacet__whenNotPaused_paused()",
   "error SwapAdminFacet__initializeSwap_aExceedMax()",
   "error SwapAdminFacet__initializeSwap_adminFeeExceedMax()",

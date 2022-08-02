@@ -27,14 +27,14 @@ import {IProposedOwnable} from "../../shared/interfaces/IProposedOwnable.sol";
  */
 contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
   // ========== Custom Errors ===========
-  error ProposedOwnableFacet__proposeRouterOwnershipRenunciation_noOwnershipChange();
-  error ProposedOwnableFacet__renounceRouterOwnership_noOwnershipChange();
-  error ProposedOwnableFacet__renounceRouterOwnership_noProposal();
-  error ProposedOwnableFacet__renounceRouterOwnership_delayNotElapsed();
-  error ProposedOwnableFacet__proposeAssetOwnershipRenunciation_noOwnershipChange();
-  error ProposedOwnableFacet__renounceAssetOwnership_noOwnershipChange();
-  error ProposedOwnableFacet__renounceAssetOwnership_noProposal();
-  error ProposedOwnableFacet__renounceAssetOwnership_delayNotElapsed();
+  error ProposedOwnableFacet__proposeRouterWhitelistRemoval_noOwnershipChange();
+  error ProposedOwnableFacet__removeRouterWhitelist_noOwnershipChange();
+  error ProposedOwnableFacet__removeRouterWhitelist_noProposal();
+  error ProposedOwnableFacet__removeRouterWhitelist_delayNotElapsed();
+  error ProposedOwnableFacet__proposeAssetWhitelistRemoval_noOwnershipChange();
+  error ProposedOwnableFacet__removeAssetWhitelist_noOwnershipChange();
+  error ProposedOwnableFacet__removeAssetWhitelist_noProposal();
+  error ProposedOwnableFacet__removeAssetWhitelist_delayNotElapsed();
   error ProposedOwnableFacet__proposeNewOwner_invalidProposal();
   error ProposedOwnableFacet__proposeNewOwner_noOwnershipChange();
   error ProposedOwnableFacet__renounceOwnership_noProposal();
@@ -49,13 +49,13 @@ contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
 
   // ============ Events ============
 
-  event RouterOwnershipRenunciationProposed(uint256 timestamp);
+  event RouterWhitelistRemovalProposed(uint256 timestamp);
 
-  event RouterOwnershipRenounced(bool renounced);
+  event RouterWhitelistRemoved(bool renounced);
 
-  event AssetOwnershipRenunciationProposed(uint256 timestamp);
+  event AssetWhitelistRemovalProposed(uint256 timestamp);
 
-  event AssetOwnershipRenounced(bool renounced);
+  event AssetWhitelistRemoved(bool renounced);
 
   event Paused();
 
@@ -71,17 +71,17 @@ contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
   }
 
   /**
-   * @notice Returns if the router ownership is renounced.
+   * @notice Returns if the router whitelist is removed.
    */
-  function routerOwnershipRenounced() public view returns (bool) {
-    return s._routerOwnershipRenounced;
+  function routerWhitelistRemoved() public view returns (bool) {
+    return s._routerWhitelistRemoved;
   }
 
   /**
-   * @notice Returns if the asset ownership is renounced.
+   * @notice Returns if the asset whitelist is removed.
    */
-  function assetOwnershipRenounced() public view returns (bool) {
-    return s._assetOwnershipRenounced;
+  function assetWhitelistRemoved() public view returns (bool) {
+    return s._assetWhitelistRemoved;
   }
 
   /**
@@ -99,17 +99,17 @@ contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
   }
 
   /**
-   * @notice Returns the timestamp when router ownership was last proposed to be renounced
+   * @notice Returns the timestamp when router whitelist was last proposed to be removed
    */
-  function routerOwnershipTimestamp() public view returns (uint256) {
-    return s._routerOwnershipTimestamp;
+  function routerWhitelistTimestamp() public view returns (uint256) {
+    return s._routerWhitelistTimestamp;
   }
 
   /**
-   * @notice Returns the timestamp when asset ownership was last proposed to be renounced
+   * @notice Returns the timestamp when asset whitelist was last proposed to be removed
    */
-  function assetOwnershipTimestamp() public view returns (uint256) {
-    return s._assetOwnershipTimestamp;
+  function assetWhitelistTimestamp() public view returns (uint256) {
+    return s._assetWhitelistTimestamp;
   }
 
   /**
@@ -125,67 +125,66 @@ contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
    * @notice Indicates if the ownership of the router whitelist has
    * been renounced
    */
-  function proposeRouterOwnershipRenunciation() public onlyOwner {
+  function proposeRouterWhitelistRemoval() public onlyOwner {
     // Use contract as source of truth
     // Will fail if all ownership is renounced by modifier
-    if (s._routerOwnershipRenounced)
-      revert ProposedOwnableFacet__proposeRouterOwnershipRenunciation_noOwnershipChange();
+    if (s._routerWhitelistRemoved) revert ProposedOwnableFacet__proposeRouterWhitelistRemoval_noOwnershipChange();
 
     // Begin delay, emit event
-    _setRouterOwnershipTimestamp();
+    _setRouterWhitelistTimestamp();
   }
 
   /**
    * @notice Indicates if the ownership of the asset whitelist has
    * been renounced
    */
-  function renounceRouterOwnership() public onlyOwner {
+  function removeRouterWhitelist() public onlyOwner {
     // Contract as sounce of truth
     // Will fail if all ownership is renounced by modifier
-    if (s._routerOwnershipRenounced) revert ProposedOwnableFacet__renounceRouterOwnership_noOwnershipChange();
+    if (s._routerWhitelistRemoved) revert ProposedOwnableFacet__removeRouterWhitelist_noOwnershipChange();
 
     // Ensure there has been a proposal cycle started
-    if (s._routerOwnershipTimestamp == 0) revert ProposedOwnableFacet__renounceRouterOwnership_noProposal();
+    if (s._routerWhitelistTimestamp == 0) revert ProposedOwnableFacet__removeRouterWhitelist_noProposal();
 
     // Delay has elapsed
-    if ((block.timestamp - s._routerOwnershipTimestamp) <= _delay)
-      revert ProposedOwnableFacet__renounceRouterOwnership_delayNotElapsed();
+    if ((block.timestamp - s._routerWhitelistTimestamp) <= _delay)
+      revert ProposedOwnableFacet__removeRouterWhitelist_delayNotElapsed();
 
     // Set renounced, emit event, reset timestamp to 0
-    _setRouterOwnership(true);
+    _setRouterWhitelistRemoved(true);
   }
 
   /**
    * @notice Indicates if the ownership of the asset whitelist has
    * been renounced
    */
-  function proposeAssetOwnershipRenunciation() public onlyOwner {
+  function proposeAssetWhitelistRemoval() public onlyOwner {
     // Contract as source of truth
     // Will fail if all ownership is renounced by modifier
-    if (s._assetOwnershipRenounced) revert ProposedOwnableFacet__proposeAssetOwnershipRenunciation_noOwnershipChange();
+    if (s._assetWhitelistRemoved) revert ProposedOwnableFacet__proposeAssetWhitelistRemoval_noOwnershipChange();
 
     // Start cycle, emit event
-    _setAssetOwnershipTimestamp();
+    _setAssetWhitelistTimestamp();
   }
 
   /**
    * @notice Indicates if the ownership of the asset whitelist has
    * been renounced
    */
-  function renounceAssetOwnership() public onlyOwner {
+  function removeAssetWhitelist() public onlyOwner {
     // Contract as source of truth
     // Will fail if all ownership is renounced by modifier
-    if (s._assetOwnershipRenounced) revert ProposedOwnableFacet__renounceAssetOwnership_noOwnershipChange();
+    if (s._assetWhitelistRemoved) revert ProposedOwnableFacet__removeAssetWhitelist_noOwnershipChange();
 
     // Ensure there has been a proposal cycle started
-    if (s._assetOwnershipTimestamp == 0) revert ProposedOwnableFacet__renounceAssetOwnership_noProposal();
+    if (s._assetWhitelistTimestamp == 0) revert ProposedOwnableFacet__removeAssetWhitelist_noProposal();
 
     // Ensure delay has elapsed
-    if ((block.timestamp - s._assetOwnershipTimestamp) <= _delay)
-      revert ProposedOwnableFacet__renounceAssetOwnership_delayNotElapsed();
+    if ((block.timestamp - s._assetWhitelistTimestamp) <= _delay)
+      revert ProposedOwnableFacet__removeAssetWhitelist_delayNotElapsed();
 
     // Set ownership, reset timestamp, emit event
-    _setAssetOwnership(true);
+    _setAssetWhitelistRemoved(true);
   }
 
   /**
@@ -262,26 +261,26 @@ contract ProposedOwnableFacet is BaseConnextFacet, IProposedOwnable {
 
   ////// INTERNAL //////
 
-  function _setRouterOwnershipTimestamp() private {
-    s._routerOwnershipTimestamp = block.timestamp;
-    emit RouterOwnershipRenunciationProposed(block.timestamp);
+  function _setRouterWhitelistTimestamp() private {
+    s._routerWhitelistTimestamp = block.timestamp;
+    emit RouterWhitelistRemovalProposed(block.timestamp);
   }
 
-  function _setRouterOwnership(bool value) private {
-    s._routerOwnershipRenounced = value;
-    delete s._routerOwnershipTimestamp;
-    emit RouterOwnershipRenounced(value);
+  function _setRouterWhitelistRemoved(bool value) private {
+    s._routerWhitelistRemoved = value;
+    delete s._routerWhitelistTimestamp;
+    emit RouterWhitelistRemoved(value);
   }
 
-  function _setAssetOwnershipTimestamp() private {
-    s._assetOwnershipTimestamp = block.timestamp;
-    emit AssetOwnershipRenunciationProposed(block.timestamp);
+  function _setAssetWhitelistTimestamp() private {
+    s._assetWhitelistTimestamp = block.timestamp;
+    emit AssetWhitelistRemovalProposed(block.timestamp);
   }
 
-  function _setAssetOwnership(bool value) private {
-    s._assetOwnershipRenounced = value;
-    delete s._assetOwnershipTimestamp;
-    emit AssetOwnershipRenounced(value);
+  function _setAssetWhitelistRemoved(bool value) private {
+    s._assetWhitelistRemoved = value;
+    delete s._assetWhitelistTimestamp;
+    emit AssetWhitelistRemoved(value);
   }
 
   function _setOwner(address newOwner) private {
