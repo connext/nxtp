@@ -379,6 +379,7 @@ contract SwapAdminFacetTest is SwapAdminFacet, StableSwapFacet, FacetHelper {
     emit SwapInitialized(
       canonicalId,
       SwapUtils.Swap({
+        key: canonicalId,
         initialA: a * AmplificationUtils.A_PRECISION,
         futureA: a * AmplificationUtils.A_PRECISION,
         swapFee: fee,

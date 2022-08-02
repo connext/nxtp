@@ -27,6 +27,7 @@ contract AmplificationUtilsTest is FacetHelper {
     _balances[1] = 100;
 
     swap = SwapUtils.Swap({
+      key: _canonicalId,
       initialA: 1000,
       futureA: 10000,
       initialATime: 100,
