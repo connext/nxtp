@@ -588,9 +588,6 @@ contract BridgeFacetTest is BridgeFacet, FacetHelper {
     // expected executor call
     if (_inputs.callsExternal) {
       {
-        bytes memory properties = _inputs.isSlow
-          ? LibCrossDomainProperty.formatDomainAndSenderBytes(_originDomain, _originSender)
-          : LibCrossDomainProperty.EMPTY_BYTES;
         vm.expectCall(
           _executor,
           abi.encodeWithSelector(
@@ -601,7 +598,8 @@ contract BridgeFacetTest is BridgeFacet, FacetHelper {
               _args.params.to,
               _args.params.recovery,
               _inputs.token,
-              properties,
+              _inputs.isSlow ? _args.originSender : address(0),
+              _inputs.isSlow ? _args.params.originDomain : 0,
               _args.params.callData
             )
           )

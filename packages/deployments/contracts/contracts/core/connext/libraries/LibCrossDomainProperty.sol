@@ -3,158 +3,109 @@ pragma solidity 0.8.15;
 
 import {TypedMemView} from "../../../nomad-core/libs/TypedMemView.sol";
 
+/**
+ * @notice This library includes functions to help parse the values appended
+ * to the `msg.data` when a call is executed by the `Executor`.
+ *
+ * During a crosschain transfer, a user specifies `callData` to be executed on
+ * the destination domain via `.call`. Prior to executing this `callData`, the
+ * `Executor` will append the following properties to the calldata:
+ * - origin - the origin domain
+ * - originSender - `msg.sender` of `xcall`
+ * - amount - the amount the `.call` is executed with
+ *
+ * This library provides helpers to parse these properties out from and append
+ * them to the calldata.
+ *
+ * ***IMPORTANT NOTE ON USAGE***
+ * It is important to keep in mind that ANYONE can append bogus properties to the
+ * `msg.data` a function receives. To ensure checks such as:
+ *      _admin == LibCrossDomainProperty.originSender(msg.data);
+ * are valid, checking these properties should be paired with enforcing the msg.sender
+ * of the call is the `Executor` contract on that domain.
+ */
 library LibCrossDomainProperty {
   // ============ Libraries ============
 
   using TypedMemView for bytes29;
   using TypedMemView for bytes;
 
-  // ============ Enums ============
-
-  /**
-   * Contains information so the properties can be type-checked properly
-   */
-  enum Types {
-    Invalid, // 0
-    DomainAndSender // 1
-  }
-
-  // ============ Structs ============
-
-  /**
-   * Struct containing the domain and an address of the caller of a function on that
-   * domain.
-   */
-  struct DomainAndSender {
-    uint32 domain;
-    address sender;
-  }
-
   // ============ Constants ============
 
-  uint256 private constant PROPERTY_LEN = 25; // 1 byte identifer + 4 bytes domain + 20 bytes address
-  // default value is the TypedMemView null view
-  bytes29 public constant EMPTY = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-  bytes public constant EMPTY_BYTES = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-
-  // ============ Modifiers ============
-
-  /**
-   * @notice Asserts a property is of type `_t`
-   * @param _view The stored property
-   * @param _t The expected type
-   */
-  modifier typeAssert(bytes29 _view, Types _t) {
-    _view.assertType(uint40(_t));
-    _;
-  }
+  // 32 bytes amount + 4 bytes domain + 20 bytes address = 56 bytes;
+  uint256 private constant PROPERTIES_LENGTH = 56;
 
   // ============ Internal Functions ============
 
   /**
-   * @notice Checks that view is a valid property length
-   * @param _view The bytes string
-   * @return TRUE if length is valid
+   * @notice Appends the supplied properties to the end of the callData
+   * @dev See warning at the top of the file about usage
+   * @param _amount The amount the call is executed with
+   * @param _originDomain The originating domain of the call
+   * @param _originSender The msg.sender of the xcall
+   * @param _calldata The function data to be executed with the .call
+   * @return bytes A byte array containing the calldata and all properties
    */
-  function isValidPropertyLength(bytes29 _view) internal pure returns (bool) {
-    uint256 _len = _view.len();
-    return _len == PROPERTY_LEN;
+  function formatCalldataWithProperties(
+    uint256 _amount,
+    uint32 _originDomain,
+    address _originSender,
+    bytes memory _calldata
+  ) internal returns (bytes memory) {
+    // Convert data to bytes
+    bytes memory properties = abi.encodePacked(_amount, _originDomain, _originSender);
+    return bytes.concat(_calldata, properties);
   }
 
   /**
-   * @notice Checks that the property is of the specified type
-   * @param _type the type to check for
-   * @param _property The property
-   * @return True if the property is of the specified type
+   * @notice Parses the amount from the msg.data
+   * @dev See warning at the top of the file about usage
+   * @param _data The msg.data sent by executor
+   * @return uint256 Amount to execute call with
    */
-  function isType(bytes29 _property, Types _type) internal pure returns (bool) {
-    return propertyType(_property) == uint8(_type);
+  function amount(bytes memory _data) internal returns (uint256) {
+    // create view
+    bytes29 typed = _data.ref(0);
+    // before the domain = calldata
+    return typed.indexUint(callDataLength(typed), 32);
   }
 
   /**
-   * @notice Checks that the property is of type DomainAndSender
-   * @param _property The property
-   * @return True if the property is of type DomainAndSender
+   * @notice Parses the origin domain from the msg.data
+   * @dev See warning at the top of the file about usage
+   * @param _data The msg.data sent by executor
+   * @return uint32 origin domain
    */
-  function isDomainAndSender(bytes29 _property) internal pure returns (bool) {
-    return isValidPropertyLength(_property) && isType(_property, Types.DomainAndSender);
+  function origin(bytes memory _data) internal returns (uint32) {
+    // create view
+    bytes29 typed = _data.ref(0);
+    // before the domain = calldata + amount
+    return uint32(typed.indexUint(callDataLength(typed) + 32, 4));
   }
 
   /**
-   * @notice Retrieves the identifier from property
-   * @param _property The property
-   * @return The property type
+   * @notice Parses the origin msg.sender from the msg.data
+   * @dev See warning at the top of the file about usage
+   * @param _data The msg.data sent by executor
+   * @return address The msg.sender of the initial `xcall`
    */
-  function propertyType(bytes29 _property) internal pure returns (uint8) {
-    return uint8(_property.indexUint(0, 1));
+  function originSender(bytes memory _data) internal returns (address) {
+    // create view
+    bytes29 typed = _data.ref(0);
+    // before the domain = calldata + amount + domain
+    return typed.indexAddress(callDataLength(typed) + 36);
   }
 
   /**
-   * @notice Converts to a Property
-   * @param _view The property
-   * @return The newly typed property
+   * @notice Used internally to get the length of the calldata included
+   * @dev See warning at the top of the file about usage
+   * @param _view The msg.data sent by executor cast as a TypedMemView
+   * @return uint256 Length of the calldata
    */
-  function tryAsProperty(bytes29 _view) internal pure returns (bytes29) {
-    if (isValidPropertyLength(_view)) {
-      return _view.castTo(uint40(Types.DomainAndSender));
-    }
-    return TypedMemView.nullView();
-  }
-
-  /**
-   * @notice Asserts that the property is of type DomainAndSender
-   * @param _view The property
-   * @return The property
-   */
-  function mustBeProperty(bytes29 _view) internal pure returns (bytes29) {
-    return tryAsProperty(_view).assertValid();
-  }
-
-  /**
-   * @notice Retrieves the sender from a property
-   * @param _property The property
-   * @return The sender address
-   */
-  function sender(bytes29 _property) internal pure typeAssert(_property, Types.DomainAndSender) returns (address) {
-    // before = 1 byte id + 4 bytes domain = 5 bytes
-    return _property.indexAddress(5);
-  }
-
-  /**
-   * @notice Retrieves the domain from a property
-   * @param _property The property
-   * @return The sender address
-   */
-  function domain(bytes29 _property) internal pure typeAssert(_property, Types.DomainAndSender) returns (uint32) {
-    // before = 1 byte identifier = 1 byte
-    return uint32(_property.indexUint(1, 4));
-  }
-
-  /**
-   * @notice Creates a serialized property from components
-   * @param _domain The domain
-   * @param _sender The sender
-   * @return The formatted view
-   */
-  function formatDomainAndSender(uint32 _domain, address _sender) internal pure returns (bytes29) {
-    return abi.encodePacked(Types.DomainAndSender, _domain, _sender).ref(0).castTo(uint40(Types.DomainAndSender));
-  }
-
-  /**
-   * @notice Creates a serialized property from components
-   * @param _domain The domain
-   * @param _sender The sender
-   * @return The formatted view
-   */
-  function formatDomainAndSenderBytes(uint32 _domain, address _sender) internal pure returns (bytes memory) {
-    return abi.encodePacked(Types.DomainAndSender, _domain, _sender);
-  }
-
-  /**
-   * @notice Creates a serialized property from components
-   * @param _property The bytes representation of the property
-   */
-  function parseDomainAndSenderBytes(bytes memory _property) internal pure returns (bytes29) {
-    return mustBeProperty(_property.ref(0));
+  function callDataLength(bytes29 _view) internal returns (uint256) {
+    uint256 len = _view.len();
+    require(len >= PROPERTIES_LENGTH, "!length");
+    // The data will be packed with the properties appended to the data
+    return len - PROPERTIES_LENGTH;
   }
 }

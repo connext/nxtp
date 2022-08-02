@@ -5,6 +5,20 @@ import "../../../utils/ForgeHelper.sol";
 
 import "../../../../contracts/core/connext/libraries/LibCrossDomainProperty.sol";
 
+contract Target {
+  uint256 public value;
+  uint256 public amount;
+  uint32 public origin;
+  address public originSender;
+
+  function saveProperties(uint256 _value) public {
+    value = _value;
+    amount = LibCrossDomainProperty.amount(msg.data);
+    origin = LibCrossDomainProperty.origin(msg.data);
+    originSender = LibCrossDomainProperty.originSender(msg.data);
+  }
+}
+
 contract LibCrossDomainPropertyTest is ForgeHelper {
   // ============ Libraries ============
 
@@ -16,142 +30,52 @@ contract LibCrossDomainPropertyTest is ForgeHelper {
 
   uint32 domain = uint32(1000);
   address sender = address(1);
+  uint256 amount = 12387129387;
+  Target target;
 
   // ============ Setup ============
 
-  function setUp() public {}
-
-  // ============ Utils ============
-  function getProperty() public returns (bytes29) {
-    return LibCrossDomainProperty.formatDomainAndSender(domain, sender);
+  function setUp() public {
+    target = new Target();
+    assertEq(target.value(), 0);
+    assertEq(target.amount(), 0);
+    assertEq(target.origin(), 0);
+    assertEq(target.originSender(), address(0));
   }
 
-  function getPropertyBytes() public returns (bytes memory) {
-    return LibCrossDomainProperty.formatDomainAndSenderBytes(domain, sender);
+  // ============ test ============
+
+  function test_LibCrossDomainProperty__shouldWorkInMemory() public {
+    uint256 value = 112112;
+    bytes memory callData = abi.encodeWithSelector(Target.saveProperties.selector, value);
+    bytes memory formatted = LibCrossDomainProperty.formatCalldataWithProperties(amount, domain, sender, callData);
+
+    assertEq(LibCrossDomainProperty.amount(formatted), amount);
+    assertEq(LibCrossDomainProperty.origin(formatted), domain);
+    assertEq(LibCrossDomainProperty.originSender(formatted), sender);
   }
 
-  // ============ isValidPropertyLength ============
+  function test_LibCrossDomainProperty__shouldWorkInFunctionCall() public {
+    uint256 value = 112112;
+    bytes memory callData = abi.encodeWithSelector(Target.saveProperties.selector, value);
+    bytes memory formatted = LibCrossDomainProperty.formatCalldataWithProperties(amount, domain, sender, callData);
 
-  // Should work
-  function test_LibCrossDomainProperty__isValidPropertyLength_works() public {
-    bytes29 property = getProperty();
-    assertTrue(LibCrossDomainProperty.isValidPropertyLength(property));
-    assertTrue(!LibCrossDomainProperty.isValidPropertyLength(LibCrossDomainProperty.EMPTY));
+    address(target).call(formatted);
+    assertEq(target.value(), value);
+    assertEq(target.amount(), amount);
+    assertEq(target.origin(), domain);
+    assertEq(target.originSender(), sender);
   }
 
-  // ============ isType ============
+  function test_LibCrossDomainProperty__shouldWorkWithEmptyProperties() public {
+    uint256 value = 112112;
+    bytes memory callData = abi.encodeWithSelector(Target.saveProperties.selector, value);
+    bytes memory formatted = LibCrossDomainProperty.formatCalldataWithProperties(0, 0, address(0), callData);
 
-  // Should work
-  function test_LibCrossDomainProperty__isType_works() public {
-    bytes29 property = getProperty();
-    assertTrue(LibCrossDomainProperty.isType(property, LibCrossDomainProperty.Types.DomainAndSender));
-    assertTrue(!LibCrossDomainProperty.isType(property, LibCrossDomainProperty.Types.Invalid));
-  }
-
-  // ============ isDomainAndSender ============
-
-  // Should work
-  function test_LibCrossDomainProperty__isDomainAndSender_works() public {
-    bytes29 property = getProperty();
-    assertTrue(LibCrossDomainProperty.isDomainAndSender(property));
-    assertTrue(!LibCrossDomainProperty.isDomainAndSender(TypedMemView.nullView()));
-  }
-
-  // ============ propertyType ============
-
-  // Should work
-  function test_LibCrossDomainProperty__propertyType_works() public {
-    uint8 propertyType = LibCrossDomainProperty.propertyType(getProperty());
-    assertEq(propertyType, uint8(1));
-  }
-
-  // ============ tryAsProperty ============
-
-  // Should return null if its invalid length
-  function test_LibCrossDomainProperty__tryAsProperty_returnsNullIfInvalid() public {
-    bytes29 ret = LibCrossDomainProperty.tryAsProperty(LibCrossDomainProperty.EMPTY);
-    assertTrue(ret.isNull());
-  }
-
-  // Should work if it is a property
-  function test_LibCrossDomainProperty__tryAsProperty_works() public {
-    bytes29 property = getProperty();
-    bytes29 ret = LibCrossDomainProperty.tryAsProperty(property);
-    assertTrue(ret.notNull());
-    assertTrue(ret.equal(property));
-  }
-
-  // ============ mustBeProperty ============
-
-  // Should work if it is not a property
-  function testFail_LibCrossDomainProperty__mustBeProperty_reverts() public {
-    // https://github.com/gakonst/foundry/issues/864
-    // bug with internal reverts, should revert with:
-    // Validity assertion failed
-    LibCrossDomainProperty.mustBeProperty(LibCrossDomainProperty.EMPTY);
-  }
-
-  // Should work if it is a property
-  function test_LibCrossDomainProperty__mustBeProperty_works() public {
-    LibCrossDomainProperty.mustBeProperty(getProperty());
-  }
-
-  // ============ sender ============
-
-  // Should fail if its not the right type
-  function testFail_LibCrossDomainProperty__sender_reverts() public {
-    // bug with internal reverts, should revert with:
-    // Type assertion failed. Got 0xffffffffff. Expected 0x0000000001
-    LibCrossDomainProperty.sender(LibCrossDomainProperty.EMPTY);
-  }
-
-  // Should work
-  function test_LibCrossDomainProperty__sender_works() public {
-    assertEq(LibCrossDomainProperty.sender(getProperty()), sender);
-  }
-
-  // ============ domain ============
-
-  // Should fail if its not the right type
-  function testFail_LibCrossDomainProperty__domain_reverts() public {
-    // https://github.com/gakonst/foundry/issues/864
-    // bug with internal reverts, should revert with:
-    // Type assertion failed. Got 0xffffffffff. Expected 0x0000000001
-    LibCrossDomainProperty.domain(LibCrossDomainProperty.EMPTY);
-  }
-
-  // Should work
-  function test_LibCrossDomainProperty__domain_works() public {
-    assertEq(LibCrossDomainProperty.domain(getProperty()), domain);
-  }
-
-  // ============ formatDomainAndSender ============
-
-  // Should work
-  function test_LibCrossDomainProperty__formatDomainAndSender_works() public {
-    bytes29 property = getProperty();
-    assertTrue(LibCrossDomainProperty.isDomainAndSender(property));
-    bytes memory propertyBytes = getPropertyBytes();
-    bytes29 converted = LibCrossDomainProperty.mustBeProperty(propertyBytes.ref(0));
-    assertTrue(LibCrossDomainProperty.isDomainAndSender(converted));
-  }
-
-  // ============ formatDomainAndSenderBytes ============
-
-  // Should work
-  function test_LibCrossDomainProperty__formatDomainAndSenderBytes_works() public {
-    bytes memory propertyBytes = getPropertyBytes();
-    bytes29 converted = LibCrossDomainProperty.mustBeProperty(propertyBytes.ref(0));
-    assertTrue(LibCrossDomainProperty.isDomainAndSender(converted));
-  }
-
-  // ============ parseDomainAndSenderBytes ============
-
-  // Should work
-  function test_LibCrossDomainProperty__parseDomainAndSenderBytes_works() public {
-    bytes memory propertyBytes = getPropertyBytes();
-    bytes29 converted = LibCrossDomainProperty.parseDomainAndSenderBytes(propertyBytes);
-    assertTrue(LibCrossDomainProperty.isDomainAndSender(converted));
-    assertTrue(converted.equal(getProperty()));
+    address(target).call(formatted);
+    assertEq(target.value(), value);
+    assertEq(target.amount(), 0);
+    assertEq(target.origin(), 0);
+    assertEq(target.originSender(), address(0));
   }
 }

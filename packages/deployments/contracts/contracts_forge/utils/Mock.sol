@@ -16,6 +16,7 @@ import {IBridgeRouter} from "../../contracts/core/connext/interfaces/IBridgeRout
 import {IWeth} from "../../contracts/core/connext/interfaces/IWeth.sol";
 import {TestERC20} from "../../contracts/test/TestERC20.sol";
 import {IExecutor} from "../../contracts/core/connext/interfaces/IExecutor.sol";
+import {LibCrossDomainProperty} from "../../contracts/core/connext/libraries/LibCrossDomainProperty.sol";
 
 import "forge-std/console.sol";
 
@@ -65,9 +66,9 @@ contract MockXApp {
   function fulfill(address asset, bytes32 message) external checkMockMessage(message) returns (bytes32) {
     IExecutor executor = IExecutor(address(msg.sender));
 
-    emit MockXAppEvent(msg.sender, asset, message, executor.amount());
+    emit MockXAppEvent(msg.sender, asset, message, LibCrossDomainProperty.amount(msg.data));
 
-    IERC20(asset).transferFrom(address(executor), address(this), executor.amount());
+    IERC20(asset).transferFrom(address(executor), address(this), LibCrossDomainProperty.amount(msg.data));
 
     return (bytes32("good"));
   }
@@ -81,12 +82,12 @@ contract MockXApp {
   ) external checkMockMessage(message) returns (bytes32) {
     IExecutor executor = IExecutor(address(msg.sender));
 
-    emit MockXAppEvent(msg.sender, asset, message, executor.amount());
+    emit MockXAppEvent(msg.sender, asset, message, LibCrossDomainProperty.amount(msg.data));
 
-    IERC20(asset).transferFrom(address(executor), address(this), executor.amount());
+    IERC20(asset).transferFrom(address(executor), address(this), LibCrossDomainProperty.amount(msg.data));
 
-    require(expectedOriginDomain == executor.origin(), "Origin domain incorrect");
-    require(expectedOriginSender == executor.originSender(), "Origin sender incorrect");
+    require(expectedOriginDomain == LibCrossDomainProperty.origin(msg.data), "Origin domain incorrect");
+    require(expectedOriginSender == LibCrossDomainProperty.originSender(msg.data), "Origin sender incorrect");
 
     return (bytes32("good"));
   }
@@ -376,17 +377,17 @@ contract MockCalldata {
   }
 
   function permissionedCall(address asset) public returns (bool) {
-    require(IExecutor(msg.sender).originSender() == originSender);
-    require(IExecutor(msg.sender).origin() == originDomain);
+    require(LibCrossDomainProperty.originSender(msg.data) == originSender);
+    require(LibCrossDomainProperty.origin(msg.data) == originDomain);
     // transfer funds from sender
-    IERC20(asset).transferFrom(msg.sender, address(this), IExecutor(msg.sender).amount());
+    IERC20(asset).transferFrom(msg.sender, address(this), LibCrossDomainProperty.amount(msg.data));
     called = true;
     return called;
   }
 
   function unpermissionedCall(address asset) public returns (bool) {
     // transfer funds from sender
-    IERC20(asset).transferFrom(msg.sender, address(this), IExecutor(msg.sender).amount());
+    IERC20(asset).transferFrom(msg.sender, address(this), LibCrossDomainProperty.amount(msg.data));
     called = true;
     return called;
   }

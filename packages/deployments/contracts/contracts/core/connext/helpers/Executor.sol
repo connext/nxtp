@@ -32,34 +32,6 @@ contract Executor is IExecutor {
   address private immutable connext;
 
   /**
-   * @notice Transaction properties that are accessible by external contracts.
-   * These properties are the `origin` and `originSender` of the transfer, and are
-   * only set once the data has been authenticated (i.e. nomad fraud window
-   * elapsed)
-   * @dev Contracts that interact with this (i.e. ones that are processing the calldata
-   * for a transfer) can use these cross domain properties to permission crosschain calls
-   * via:
-   *
-   * `require(PERMISSIONED == IExecutor(msg.sender).originSender(), "!authed");`
-   *
-   * If the data has not been authenticated, these properties are set to empty, and the
-   * above code will revert
-   */
-  bytes private properties = LibCrossDomainProperty.EMPTY_BYTES;
-
-  /**
-   * @notice Amount transferred via the crosschain transaction. This is always
-   * accessible (i.e. set even if the data is not authenticated) by contracts
-   * processing calldata.
-   * @dev This amount could be different than the amount transferred by the user from the
-   * origin domain due to the AMM slippage.
-   *
-   * Callers can access the amount via:
-   * `IExecutor(msg.sender).amount();`
-   */
-  uint256 private amnt;
-
-  /**
    * @notice The amount of gas needed to execute _sendToRecovery
    * @dev Used to calculate the amount of gas to reserve from transaction
    * to properly handle failure cases
@@ -99,43 +71,11 @@ contract Executor is IExecutor {
   }
 
   /**
-   * @notice Allows a `_to` contract to access origin domain sender (i.e. msg.sender of `xcall`)
-   * @dev These properties are set via reentrancy a la L2CrossDomainMessenger from
-   * optimism
-   */
-  function originSender() external view override returns (address) {
-    // The following will revert if it is empty
-    bytes29 _parsed = LibCrossDomainProperty.parseDomainAndSenderBytes(properties);
-    return LibCrossDomainProperty.sender(_parsed);
-  }
-
-  /**
-   * @notice Allows a `_to` contract to access origin domain (i.e. domain of `xcall`)
-   * @dev These properties are set via reentrancy a la L2CrossDomainMessenger from
-   * optimism
-   */
-  function origin() external view override returns (uint32) {
-    // The following will revert if it is empty
-    bytes29 _parsed = LibCrossDomainProperty.parseDomainAndSenderBytes(properties);
-    return LibCrossDomainProperty.domain(_parsed);
-  }
-
-  /**
-   * @notice Allows a `_to` contract to access the amount that was delivered from the
-   * bridge. This is also set during reentrancy, but is set during fast *and* slow
-   * liquidity paths
-   * @dev These properties are set via reentrancy a la L2CrossDomainMessenger from
-   * optimism
-   */
-  function amount() external view override returns (uint256) {
-    return amnt;
-  }
-
-  /**
-   * @notice Executes some arbitrary call data on a given address. The call data executes can be payable, and
-   * will have `amount` sent along with the function (or approved to the contract). If the call fails, rather
-   * than reverting, funds are sent directly to the provided fallback address (`recovery`).
-   *
+   * @notice Executes some arbitrary call data on a given address. The
+   * call data executes can be payable, and will have `amount` sent
+   * along with the function (or approved to the contract). If the
+   * call fails, rather than reverting, funds are sent directly to
+   * some provided fallback address
    * @param _args ExecutorArgs to function.
    */
   function execute(ExecutorArgs memory _args) external override onlyConnext returns (bool, bytes memory) {
@@ -152,7 +92,8 @@ contract Executor is IExecutor {
         _args.recovery,
         _args.assetId,
         _args.amount,
-        _args.properties,
+        _args.originSender,
+        _args.originDomain,
         _args.callData,
         returnData,
         success
@@ -171,27 +112,20 @@ contract Executor is IExecutor {
       SafeERC20.safeIncreaseAllowance(IERC20(_args.assetId), _args.to, _args.amount);
     }
 
-    // If it should set the properties, set them.
-    // NOTE: safe to set the properties always because modifier will revert if
-    // it is the wrong type on conversion, and revert occurs with empty type as
-    // well
-    properties = _args.properties;
-
-    // Set the amount as well
-    amnt = _args.amount;
-
-    // Ensure there is enough gas to handle failures
-    uint256 gas = gasleft() - FAILURE_GAS;
-
     // Try to execute the callData
     // the low level call will return `false` if its execution reverts
-    (success, returnData) = ExcessivelySafeCall.excessivelySafeCall(_args.to, gas, 0, MAX_COPY, _args.callData);
-
-    // Unset properties
-    properties = LibCrossDomainProperty.EMPTY_BYTES;
-
-    // Unset amount
-    amnt = 0;
+    (success, returnData) = ExcessivelySafeCall.excessivelySafeCall(
+      _args.to,
+      gas,
+      0,
+      MAX_COPY,
+      LibCrossDomainProperty.formatCalldataWithProperties(
+        _args.amount,
+        _args.originDomain,
+        _args.originSender,
+        _args.callData
+      )
+    );
 
     // Handle failure cases
     if (!success) {
@@ -205,7 +139,8 @@ contract Executor is IExecutor {
       _args.recovery,
       _args.assetId,
       _args.amount,
-      _args.properties,
+      _args.originSender,
+      _args.originDomain,
       _args.callData,
       returnData,
       success
@@ -228,7 +163,7 @@ contract Executor is IExecutor {
     address _to,
     address _recovery,
     uint256 _amount
-  ) private {
+  ) internal {
     if (_amount == 0) {
       // Nothing to do, exit early
       return;
